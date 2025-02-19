@@ -7,11 +7,12 @@ from services.stream import StreamService
 from services.stt import STTService
 from services.tts import TTSService 
 from services.llm import LLMService
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 
 
 
 
-async def twilio_handler(client_ws, path):
+async def twilio_handler(client_ws):
     outbox = asyncio.Queue()
     #streamsid_queue = asyncio.Queue()
 
@@ -45,7 +46,7 @@ async def twilio_handler(client_ws, path):
                         "streamSid": stream_sid,
                         "event": "clear",
                     }
-                    await client_ws.send(json.dumps(payload))
+                    await client_ws.send_json(payload)
                     
                     # reset states
                     stream_service.reset()
@@ -76,27 +77,38 @@ async def twilio_handler(client_ws, path):
             tts_total_time = time.time() - tts_start_time
             print(f"TTS processing time: {tts_total_time:.2f} seconds")
             await stream_service.sent_audio(audio)
-            
 
-        async def client_receiver():
+         # Queue for incoming WebSocket messages
+        message_queue = asyncio.Queue()
+
+        async def websocket_listener():
+            try:
+                while True:
+                    data = await client_ws.receive_text()
+                    await message_queue.put(json.loads(data))
+            except WebSocketDisconnect:
+                print("Client disconnected")
+           
+
+        async def message_processor():
             """Receives and processes messages from Twilio"""
             print("Client receiver connected")
-            try:
-                async for message in client_ws:
-                    data = json.loads(message)
-                    event_type = data.get("event")
+            while True:
+                message = await message_queue.get()
+                try:
+                    event_type = message.get("event")
 
                     if event_type == "start":
-                        stream_service.set_streamsid(data["start"]["streamSid"])
+                        stream_service.set_streamsid(message["start"]["streamSid"])
                     elif event_type in ("connected", "start"):
                         print("Twilio connected or started")
                     elif event_type == "media":
-                        asyncio.create_task(process_media(data))
+                        asyncio.create_task(process_media(message))
                     elif event_type == "stop":
                         print("Twilio connection stopped")
                         break
-            except Exception as e:
-                print(f"Client Receiver Error: {e}")
+                except Exception as e:
+                    print(f"Client Receiver Error: {e}")
         
         stream_service.on('audiosent', handle_audio_sent)
         stt_service.on("transcription", handle_llm)
@@ -104,9 +116,10 @@ async def twilio_handler(client_ws, path):
         llm_service.on("llm_response", handle_tts)
         tts_service.on("audio", send_audio_to_twilio)
 
-        await asyncio.gather(
-            client_receiver(),
-        )
+        listener_task = asyncio.create_task(websocket_listener())
+        processor_task = asyncio.create_task(message_processor())
+
+        await asyncio.gather(listener_task, processor_task)
 
     except Exception as e:
         print(f"WebSocket Handler Error: {e}")

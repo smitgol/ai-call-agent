@@ -1,17 +1,17 @@
-import os
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 import asyncio
-import websockets
-import sys
-from services.twilio import twilio_handler
+from services.twilio import twilio_handler  # assuming twilio_handler is async
 
+app = FastAPI()
 
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    await websocket.accept()
+    try:
+        await twilio_handler(websocket)
+    except WebSocketDisconnect:
+        print("Client disconnected")
 
-def main():
-	proxy_server = websockets.serve(twilio_handler, '0.0.0.0', 5000)
-	print('Server starting on ws://localhost:5000')
-	asyncio.get_event_loop().run_until_complete(proxy_server)
-	asyncio.get_event_loop().run_forever()
-	
-
-if __name__ == '__main__':
-	sys.exit(main() or 0)
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("main:app", host="0.0.0.0", port=5000, reload=True)

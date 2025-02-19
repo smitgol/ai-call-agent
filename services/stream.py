@@ -20,8 +20,7 @@ class StreamService(EventEmitter):
                 "payload": audio
             }
         }
-        await self.ws.send(json.dumps(payload))
-
+        await self.ws.send_json(payload)
         mark_label = str(uuid.uuid4())
         await self.emit('audiosent', mark_label)
     
