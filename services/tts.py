@@ -13,15 +13,16 @@ from .config import ELEVENLABS_API_KEY
 
 class TTSService(EventEmitter):
 
-    def __init__(self):
+    def __init__(self, type):
         super().__init__()
         self.voice_id = "JBFqnCBsd6RMkjVDRZzb"
         self.model_id = "eleven_turbo_v2_5"
         self.language_code = "hi"
+        self.type = type
+        self.output_format =  "mp3_44100_128" if self.type == "assistant" else "ulaw_8000"
 
     async def get_audio(self, text):
         try:
-            output_format = "ulaw_8000"            
             url = f"https://api.elevenlabs.io/v1/text-to-speech/{self.voice_id}/stream"
             headers = {
                 "xi-api-key": ELEVENLABS_API_KEY,
@@ -29,7 +30,7 @@ class TTSService(EventEmitter):
                 "Accept": "audio/wav"
             }
             params = {
-                "output_format": output_format,
+                "output_format": self.output_format,
                 "optimize_streaming_latency": 4
             }
             data = {
@@ -41,8 +42,9 @@ class TTSService(EventEmitter):
                 async with session.post(url, headers=headers, params=params, json=data) as response:
                     if response.status == 200:
                         audio_content = await response.read()
-                        audio_base64 = base64.b64encode(audio_content).decode('utf-8')
-                        await self.emit('audio', audio_base64)
+                        if self.type != "assistant":
+                            audio_content = base64.b64encode(audio_content).decode('utf-8')
+                        await self.emit('audio', audio_content)
         except Exception as e:
             print(f"Error getting audio: {e}")
 

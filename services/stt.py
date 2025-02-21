@@ -1,33 +1,45 @@
 import websockets
 from services.event_emmiter import EventEmitter
-from deepgram import DeepgramClient, LiveOptions, LiveTranscriptionEvents
+from deepgram import DeepgramClient, LiveOptions, LiveTranscriptionEvents, DeepgramClientOptions
 from .config import DEEPGRAM_API_KEY
 
 class STTService(EventEmitter):
 
-    def __init__(self):
+    def __init__(self, TYPE):
         super().__init__()
-        self.client = DeepgramClient(DEEPGRAM_API_KEY)
+        config = DeepgramClientOptions(
+                options={"keepalive": "true"}
+            )
+        self.client = DeepgramClient(DEEPGRAM_API_KEY, config)
         self.deepgram_live = None
         self.final_result = ""
         self.speech_final = False
         self.stream_sid = None
         self.language = "hi"
         self.model = "nova-2"
+        self.encoding = "mulaw"
+        self._for = TYPE
 
     async def connect(self):
-        self.deepgram_live = self.client.listen.asynclive.v("1")
-        await self.deepgram_live.start(LiveOptions(
-            model=self.model, 
-            language=self.language, 
-            encoding="mulaw",
-            sample_rate=8000,
-            channels=1,
-            punctuate=True,
-            interim_results=True,
-            endpointing=200,
-            utterance_end_ms=1000
-        ))
+        self.deepgram_live = self.client.listen.asyncwebsocket.v("1")
+        if self._for == "twilio":
+            
+            await self.deepgram_live.start(LiveOptions(
+                language=self.language, 
+                encoding=self.encoding,
+                sample_rate=8000,
+                channels=1,
+                punctuate=True,
+                interim_results=True,
+                endpointing=200,
+                utterance_end_ms=1000
+            ))
+            
+        else:
+            await self.deepgram_live.start(LiveOptions(
+                language=self.language,
+                model=self.model,
+            ))
 
         self.deepgram_live.on(LiveTranscriptionEvents.Transcript, self.handle_transcription)
         self.deepgram_live.on(LiveTranscriptionEvents.Error, self.handle_error)
@@ -66,6 +78,7 @@ class STTService(EventEmitter):
                     stream_sid = self.stream_sid
                     await self.emit('utterance', text, stream_sid)
         except Exception as e:
+            print("Error in handle_transcription")
             e.print_stack()
 
             

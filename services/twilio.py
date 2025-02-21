@@ -7,7 +7,7 @@ from services.stream import StreamService
 from services.stt import STTService
 from services.tts import TTSService 
 from services.llm import LLMService
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import WebSocketDisconnect
 
 
 

@@ -26,7 +26,7 @@ twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Say language="hi-IN">Namaskar Me AI Agent Hu</Say>
   <Connect>
-    <Stream url="wss://8734-103-161-98-39.ngrok-free.app/ws" />
+    <Stream url="wss://{stream_url}" />
   </Connect>
 </Response>"""
 
