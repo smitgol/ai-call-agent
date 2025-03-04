@@ -1,7 +1,7 @@
 import websockets
 from services.event_emmiter import EventEmitter
 from deepgram import DeepgramClient, LiveOptions, LiveTranscriptionEvents, DeepgramClientOptions
-from .config import DEEPGRAM_API_KEY
+from services.config import DEEPGRAM_API_KEY
 
 class STTService(EventEmitter):
 
@@ -32,7 +32,8 @@ class STTService(EventEmitter):
                 punctuate=True,
                 interim_results=True,
                 endpointing=200,
-                utterance_end_ms=1000
+                utterance_end_ms=1000,
+                model=self.model
             ))
             
         else:
@@ -78,7 +79,6 @@ class STTService(EventEmitter):
                     stream_sid = self.stream_sid
                     await self.emit('utterance', text, stream_sid)
         except Exception as e:
-            print("Error in handle_transcription")
             e.print_stack()
 
             

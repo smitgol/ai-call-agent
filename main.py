@@ -3,8 +3,14 @@ import asyncio
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from services.twilio import twilio_handler  # assuming twilio_handler is async
-from services.config import DEEPGRAM_API_KEY
 from services.voice_assistant import voice_assistant_handler
+import os
+from twilio.twiml.voice_response import Connect, VoiceResponse
+from fastapi.responses import HTMLResponse
+from typing import Dict
+from services.config import initial_message
+from utils import get_twilio_client, check_and_set_initial_message
+
 app = FastAPI()
 
 
@@ -30,6 +36,34 @@ async def voice_assistant_endpoint(websocket: WebSocket):
 @app.get("/voice-assistant")
 async def get_assistant(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
+
+@app.post("/handle-call")
+async def start_call():
+    server = os.environ.get("SERVER")
+    response = VoiceResponse()
+    connect = Connect()
+    connect.stream(url=f"wss://{server}/ws")
+    response.append(connect)
+    return HTMLResponse(content=str(response), status_code=200)
+
+@app.post("/start_call")
+async def start_call(request: Dict[str, str]):
+    to_number = request.get("to_number")
+    service_url = f"https://{os.getenv('SERVER')}/handle-call"
+    await check_and_set_initial_message(initial_message)
+    try:
+        twilio_client = get_twilio_client()
+        call = twilio_client.calls.create(
+            to=to_number,  # Person A
+            from_=os.get('FROM_NUMBER'),  # Your Twilio number
+            url=service_url
+        )
+        return {"status": "success", "message": "Call initiated"}
+    except Exception as e:
+        print("Error in start_call")
+        print(e)
+        return {"status": "failed", "message": e}
+
 
 
 if __name__ == "__main__":

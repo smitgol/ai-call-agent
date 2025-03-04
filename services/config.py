@@ -13,6 +13,9 @@ ELEVENLABS_API_KEY = os.getenv('ELEVENLABS_API_KEY')
 TWILIO_ACCOUNT_SID = os.getenv('TWILIO_ACCOUNT_SID')
 TWILIO_AUTH_TOKEN = os.getenv('TWILIO_AUTH_TOKEN')
 
+#inital message
+initial_message = "Namaskar app credit card kharidne me ruchi rakhte hai ?"
+
 # Validate required environment variables
 required_vars = [
     'DEEPGRAM_API_KEY',

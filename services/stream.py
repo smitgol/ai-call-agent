@@ -11,6 +11,9 @@ class StreamService(EventEmitter):
 
     def set_streamsid(self, streamsid):
         self.stream_sid = streamsid
+    
+    def get_streamsid(self):
+        return self.stream_sid
 
     async def sent_audio(self, audio):
         payload = {

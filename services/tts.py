@@ -1,11 +1,10 @@
-import requests
 import websockets
 from services.event_emmiter import EventEmitter
 import base64
 from io import BytesIO
 import aiohttp
-from .config import ELEVENLABS_API_KEY
-
+from services.config import ELEVENLABS_API_KEY
+import json
 
 
 
@@ -20,6 +19,7 @@ class TTSService(EventEmitter):
         self.language_code = "hi"
         self.type = type
         self.output_format =  "mp3_44100_128" if self.type == "assistant" else "ulaw_8000"
+        self.tts_ws = None
 
     async def get_audio(self, text):
         try:
@@ -45,8 +45,21 @@ class TTSService(EventEmitter):
                         if self.type != "assistant":
                             audio_content = base64.b64encode(audio_content).decode('utf-8')
                         await self.emit('audio', audio_content)
+                        return audio_content
+                    else:
+                        print(f"Error getting audio: {response}")
         except Exception as e:
             print(f"Error getting audio: {e}")
+    
+    async def connect_tts(self):
+        uri = f"wss://api.elevenlabs.io/v1/text-to-speech/{self.voice_id}/stream-input?model_id={self.model_id}&output_format={self.output_format}&optimize_streaming_latency=4&language_code={self.language_code}"
+        tts_ws = await websockets.connect(uri)
+        self.tts_ws = tts_ws
+        await tts_ws.send(json.dumps({
+            "text": " ",
+            "voice_settings": {"stability": 0.5, "similarity_boost": 0.8},
+            "xi_api_key": ELEVENLABS_API_KEY,
+        }))
 
     async def close(self):
         await self.tts_ws.__aexit__()
@@ -62,6 +75,13 @@ class TTSService(EventEmitter):
 
     async def handle_metadata(self, metadata):
         print(f"Metadata: {metadata}")
+    
+    async def end_tts_streaming(self, tts_ws):
+        await tts_ws.send(json.dumps({"text": ""}))
+    
+    async def disconnect(self):
+        await self.tts_ws.close()
+        self.tts_ws = None
 
 
 
