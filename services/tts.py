@@ -43,8 +43,9 @@ class TTSService(EventEmitter):
                     if response.status == 200:
                         audio_content = await response.read()
                         if self.type != "assistant":
-                            audio_content = base64.b64encode(audio_content).decode('utf-8')
-                        await self.emit('audio', audio_content)
+                            audio_content = base64.b64encode(audio_content)
+                            decoded_audio_content = base64.b64encode(audio_content).decode('utf-8')
+                        await self.emit('audio', decoded_audio_content)
                         return audio_content
                     else:
                         print(f"Error getting audio: {response}")

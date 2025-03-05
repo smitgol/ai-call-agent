@@ -56,4 +56,6 @@ def getAudioContent(initial_message):
     safe_filename = base64.b64encode(initial_message.encode()).decode()
     file_path = f"saved_initial_message/{safe_filename}.txt"
     with open(file_path, "rb") as f:
-        return f.read()
+        audio_bytes = f.read()
+        audio_content = audio_bytes.decode('utf-8')
+        return audio_content
