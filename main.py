@@ -55,7 +55,7 @@ async def start_call(request: Dict[str, str]):
         twilio_client = get_twilio_client()
         call = twilio_client.calls.create(
             to=to_number,  # Person A
-            from_=os.get('FROM_NUMBER'),  # Your Twilio number
+            from_=os.getenv('FROM_NUMBER'),  # Your Twilio number
             url=service_url
         )
         return {"status": "success", "message": "Call initiated"}

@@ -173,7 +173,7 @@ async def twilio_handler(client_ws):
                     if event_type == "start":
                         stream_service.set_streamsid(message["start"]["streamSid"])
                         audio_content = getAudioContent(initial_message)
-                        await send_audio_to_twilio(audio_content)
+                        await stream_service.sent_audio(audio_content)
                     elif event_type in ("connected", "start"):
                         print("Twilio connected or started")
                     elif event_type == "media":
