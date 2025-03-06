@@ -10,6 +10,9 @@ from fastapi.responses import HTMLResponse
 from typing import Dict
 from services.config import initial_message
 from utils import get_twilio_client, check_and_set_initial_message
+from dotenv import load_dotenv
+
+load_dotenv()
 
 app = FastAPI()
 
@@ -38,7 +41,7 @@ async def get_assistant(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
 
 @app.post("/handle-call")
-async def start_call():
+async def handle_call():
     server = os.environ.get("SERVER")
     response = VoiceResponse()
     connect = Connect()

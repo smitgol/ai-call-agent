@@ -20,21 +20,16 @@ from_number = os.getenv('FROM_NUMBER')
 stream_url = os.getenv('STREAM_URL')
 client = Client(account_sid, auth_token)
 
+service_url = f"https://{os.getenv('SERVER')}/handle-call"
 
-# Define your TwiML instructions – note the <Stream> URL points to your WebSocket endpoint.
-twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-  <Say language="hi-IN">Namaskar Me AI Agent Hu</Say>
-  <Connect>
-    <Stream url="wss://{stream_url}" />
-  </Connect>
-</Response>"""
-
+# Validate required environment variables
+if not to_number or not from_number:
+    raise ValueError("TO_NUMBER or FROM_NUMBER environment variable is missing!")
 
 # Create a call
 call = client.calls.create(
-    twiml=twiml,  # Ensure proper placement of <Stream>
     to=to_number,  # Person A
-    from_=from_number  # Your Twilio number
+    from_=from_number,  # Your Twilio number
+    url=service_url
 )
 
