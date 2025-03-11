@@ -11,6 +11,9 @@ from fastapi import WebSocketDisconnect
 from utils import text_chunker, getAudioContent
 import websockets
 from services.config import initial_message
+import audioop
+import webrtcvad
+
 
 async def twilio_handler(client_ws):
     outbox = asyncio.Queue()
@@ -29,13 +32,24 @@ async def twilio_handler(client_ws):
     await tts_service.connect_tts()
     marks = deque()
     tts_task = None
+    vad = webrtcvad.Vad(3)
 
     try:
 
         async def process_media(msg):
             nonlocal stt_start_time
             stt_start_time = time.time()
-            await stt_service.send(base64.b64decode(msg['media']['payload']))
+            raw_data = base64.b64decode(msg['media']['payload'])
+            await stt_service.send(raw_data)
+            pcm_data = audioop.ulaw2lin(raw_data, 2)
+            # Perform VAD detection
+            try:
+                is_speech = vad.is_speech(pcm_data, 8000)  # 8000 Hz sample rate
+                if is_speech:
+                    await stop_speaking()
+            except Exception as e:
+                print(f"VAD error: {e}")
+
 
 
         async def handle_audio_sent(mark_label):
@@ -58,16 +72,21 @@ async def twilio_handler(client_ws):
         async def stop_speaking():
             try:
                 streamId = stream_service.get_streamsid()
-                
-                if (streamId):
-                    payload = {
-                        "streamSid": streamId,
-                        "event": "clear",
-                    }
-                    await client_ws.send_json(payload)
-                    stream_service.reset()
-                    #if tts_service.tts_ws:
-                    #    await tts_service.disconnect()
+                sending_audio = stream_service.get_send_audio()
+
+                if (sending_audio):
+                    if (streamId):
+                        payload = {
+                            "streamSid": streamId,
+                            "event": "clear",
+                        }
+                        await client_ws.send_json(payload)
+                        stream_service.set_send_audio(False)
+                        stream_service.reset()
+                        print("Stopped speaking")
+                        if tts_service.tts_ws:
+                            await tts_service.disconnect()
+                            await tts_service.connect_tts()
                 
             except Exception as e:
                 print(f"Error stopping speaking: {e}")
@@ -119,6 +138,7 @@ async def twilio_handler(client_ws):
         async def send_audio_chunks_to_twilio(tts_listener):
             print("TTS to Twilio")
             async for audio_chunk in tts_listener:
+                stream_service.set_send_audio(True)
                 await send_audio_to_twilio(audio_chunk)
             print('TTS processing time: ', time.time() - tts_start_time)
             await tts_service.disconnect()
@@ -139,6 +159,7 @@ async def twilio_handler(client_ws):
                     elif data.get('isFinal'):
                         #send_audio_to_twilio("")
                         if tts_task:
+                            stream_service.set_send_audio(True)
                             tts_task.cancel()
                             tts_task = None
                         break
@@ -174,6 +195,7 @@ async def twilio_handler(client_ws):
                         stream_service.set_streamsid(message["start"]["streamSid"])
                         audio_content = getAudioContent(initial_message)
                         await stream_service.sent_audio(audio_content)
+                        print("Initial message sent")
                     elif event_type in ("connected", "start"):
                         print("Twilio connected or started")
                     elif event_type == "media":

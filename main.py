@@ -53,6 +53,7 @@ async def handle_call():
 async def start_call(request: Dict[str, str]):
     to_number = request.get("to_number")
     service_url = f"https://{os.getenv('SERVER')}/handle-call"
+    print("Service URL: ", service_url)
     await check_and_set_initial_message(initial_message)
     try:
         twilio_client = get_twilio_client()

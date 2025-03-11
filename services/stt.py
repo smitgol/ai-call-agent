@@ -33,7 +33,8 @@ class STTService(EventEmitter):
                 interim_results=True,
                 endpointing=200,
                 utterance_end_ms=1000,
-                model=self.model
+                model=self.model,
+                vad_events=True,
             ))
             
         else:
@@ -43,14 +44,19 @@ class STTService(EventEmitter):
             ))
 
         self.deepgram_live.on(LiveTranscriptionEvents.Transcript, self.handle_transcription)
+        self.deepgram_live.on(LiveTranscriptionEvents.SpeechStarted, self.handle_speech_started)
         self.deepgram_live.on(LiveTranscriptionEvents.Error, self.handle_error)
         self.deepgram_live.on(LiveTranscriptionEvents.Close, self.handle_close)
         self.deepgram_live.on(LiveTranscriptionEvents.Warning, self.handle_warning)
         self.deepgram_live.on(LiveTranscriptionEvents.Metadata, self.handle_metadata)
         self.deepgram_live.on(LiveTranscriptionEvents.UtteranceEnd, self.handle_utterance_end)
 
+    async def handle_speech_started(self, self_obj, speech_started):
+        pass
+    
     async def handle_utterance_end(self, self_obj, utterance_end):
         try:
+            print("Utterance end")
             if not self.speech_final:
                 await self.emit('utterance', self.final_result)
                 self.final_result = ''

@@ -2,7 +2,10 @@ import os
 from twilio.rest import Client
 from services.tts import TTSService
 import base64
+import time
+from dotenv import load_dotenv
 
+load_dotenv()
 
 async def text_chunker(chunks):
     """Split text into chunks, ensuring to not break sentences."""
@@ -53,9 +56,11 @@ async def check_and_set_initial_message(initial_message):
     
 def getAudioContent(initial_message):
     # Convert initial message to base64 for safe filename first
+    audio_content_start_time = time.time()
     safe_filename = base64.b64encode(initial_message.encode()).decode()
     file_path = f"saved_initial_message/{safe_filename}.txt"
     with open(file_path, "rb") as f:
         audio_bytes = f.read()
         audio_content = audio_bytes.decode('utf-8')
+        print(f"Audio content processing time: {time.time() - audio_content_start_time:.2f} seconds")
         return audio_content
