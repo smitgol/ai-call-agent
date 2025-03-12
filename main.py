@@ -12,7 +12,7 @@ from services.config import initial_message
 from utils import get_twilio_client, check_and_set_initial_message
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(override=True)
 
 app = FastAPI()
 
@@ -42,7 +42,7 @@ async def get_assistant(request: Request):
 
 @app.post("/handle-call")
 async def handle_call():
-    server = os.environ.get("SERVER")
+    server = os.environ["SERVER"]
     response = VoiceResponse()
     connect = Connect()
     connect.stream(url=f"wss://{server}/ws")
@@ -52,14 +52,14 @@ async def handle_call():
 @app.post("/start_call")
 async def start_call(request: Dict[str, str]):
     to_number = request.get("to_number")
-    service_url = f"https://{os.getenv('SERVER')}/handle-call"
+    service_url = f"https://{os.environ['SERVER']}/handle-call"
     print("Service URL: ", service_url)
     await check_and_set_initial_message(initial_message)
     try:
         twilio_client = get_twilio_client()
         call = twilio_client.calls.create(
             to=to_number,  # Person A
-            from_=os.getenv('FROM_NUMBER'),  # Your Twilio number
+            from_=os.environ['FROM_NUMBER'],  # Your Twilio number
             url=service_url
         )
         return {"status": "success", "message": "Call initiated"}

@@ -5,7 +5,7 @@ import base64
 import time
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(override=True)
 
 async def text_chunker(chunks):
     """Split text into chunks, ensuring to not break sentences."""
@@ -31,8 +31,8 @@ async def text_chunker(chunks):
         print(e)
    
 def get_twilio_client():
-    account_sid = os.environ.get("TWILIO_ACCOUNT_SID")
-    auth_token = os.environ.get("TWILIO_AUTH_TOKEN")
+    account_sid = os.environ["TWILIO_ACCOUNT_SID"]
+    auth_token = os.environ["TWILIO_AUTH_TOKEN"]
     return Client(account_sid, auth_token)
 
 async def check_and_set_initial_message(initial_message):
