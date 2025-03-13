@@ -55,12 +55,16 @@ async def start_call(request: Dict[str, str]):
     service_url = f"https://{os.environ['SERVER']}/handle-call"
     print("Service URL: ", service_url)
     await check_and_set_initial_message(initial_message)
+    ws_url = f"wss://{os.environ['SERVER']}/ws"
+
+    twiml = f'''<?xml version="1.0" encoding="UTF-8"?><Response><Connect><Stream url="{ws_url}" /></Connect></Response>'''
     try:
         twilio_client = get_twilio_client()
         call = twilio_client.calls.create(
             to=to_number,  # Person A
             from_=os.environ['FROM_NUMBER'],  # Your Twilio number
-            url=service_url
+            #url=service_url
+            twiml=twiml
         )
         return {"status": "success", "message": "Call initiated"}
     except Exception as e:
