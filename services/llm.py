@@ -1,16 +1,15 @@
 from groq import AsyncGroq
 from services.event_emmiter import EventEmitter
-from services.config import GROQ_API_KEY  # Changed from relative to absolute import
+from services.config import GROQ_API_KEY, PROMPT  # Changed from relative to absolute import
 
 GROQ_API_KEY = GROQ_API_KEY
 
-prompt = f"you are ai call agent that perform sale operation. \nyou have to sale credit card \nif user is not interested try convincing them one more time \nHere is the card detail\n--> No annual charge \n--> get airport lounge service once every quarter  \nDpnt tell card detail one first message\nYou have to talk in hindi.Keep your answer short and simple.keep your answer under 50 words"
     
 
 class LLMService(EventEmitter):
     def __init__(self):
         super().__init__()
-        self.system_message = prompt
+        self.system_message = PROMPT
         self.user_context = [
             {"role": "system", "content": self.system_message}
         ]

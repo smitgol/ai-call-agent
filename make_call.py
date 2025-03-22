@@ -7,7 +7,9 @@ import requests
 import json
 import os
 import uuid
+from dotenv import load_dotenv
 
+load_dotenv(override=True)
 
 # make the outgoing call
 from twilio.rest import Client
@@ -30,6 +32,6 @@ if not to_number or not from_number:
 call = client.calls.create(
     to=to_number,  # Person A
     from_=from_number,  # Your Twilio number
-    url=service_url
+    twiml=twiml
 )
 
