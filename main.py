@@ -16,10 +16,6 @@ load_dotenv(override=True)
 
 app = FastAPI()
 
-
-app.mount("/static", StaticFiles(directory="voice_assistant/static"), name="static")
-templates = Jinja2Templates(directory="voice_assistant")
-
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
@@ -36,9 +32,6 @@ async def voice_assistant_endpoint(websocket: WebSocket):
     except WebSocketDisconnect:
         print("Client disconnected")
 
-@app.get("/voice-assistant")
-async def get_assistant(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
 
 @app.post("/handle-call")
 async def handle_call():
