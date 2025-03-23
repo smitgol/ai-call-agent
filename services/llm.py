@@ -14,7 +14,7 @@ class LLMService(EventEmitter):
             {"role": "system", "content": self.system_message}
         ]
         self.llm = AsyncGroq(api_key=GROQ_API_KEY)
-        self.model = "llama-3.2-3b-preview"
+        self.model = "llama-3.3-70b-versatile"
 
     async def completion(self, text):
         try:

@@ -13,7 +13,9 @@ import websockets
 from services.config import initial_message
 import audioop
 import webrtcvad
+import logging
 
+logger = logging.getLogger(__name__)
 
 async def twilio_handler(client_ws):
     outbox = asyncio.Queue()
@@ -48,7 +50,7 @@ async def twilio_handler(client_ws):
                 if is_speech:
                     await stop_speaking()
             except Exception as e:
-                print(f"VAD error: {e}")
+                logger.error(f"VAD error: {e}")
 
 
 
@@ -67,7 +69,7 @@ async def twilio_handler(client_ws):
                     # reset states
                     stream_service.reset()
             except Exception as e:
-                print(f"Error handling utterance: {e}")
+                logger.error(f"Error handling utterance: {e}")
         
         async def stop_speaking():
             try:
@@ -83,20 +85,22 @@ async def twilio_handler(client_ws):
                         await client_ws.send_json(payload)
                         stream_service.set_send_audio(False)
                         stream_service.reset()
-                        print("Stopped speaking")
+                        marks.clear()
+                        logger.info("Stopped speaking")
                         if tts_service.tts_ws:
                             await tts_service.disconnect()
                             await tts_service.connect_tts()
                 
             except Exception as e:
-                print(f"Error stopping speaking: {e}")
+                logger.error(f"Error stopping speaking: {e}")
 
         async def handle_llm(transcript):
             nonlocal llm_start_time
             stt_total_time = time.time() - stt_start_time
-            print(f"STT processing time: {stt_total_time:.2f} seconds")
+            logger.info(f"STT processing time: {stt_total_time:.2f} seconds")
+            logger.info(f"STT to LLM: {transcript}")
             llm_start_time = time.time()
-            print("STT to LLM")
+            logger.info("STT to LLM")
             #await llm_service.completion(transcript)
             await llm_service.complete_with_chunks(transcript)
 
@@ -125,22 +129,22 @@ async def twilio_handler(client_ws):
                     try:
                         await tts_service.tts_ws.send(json.dumps({"text": text}))
                     except websockets.exceptions.ConnectionClosedOK:
-                        print(f"Error sending text to TTS: {e}")
+                        logger.error(f"Error sending text to TTS: {e}")
                 await tts_service.end_tts_streaming(tts_service.tts_ws)
-                print("LLM processing time: ", time.time() - llm_start_time)
+                logger.info("LLm processing time: ", time.time() - llm_start_time)
                 await tts_task
                 tts_start_time = time.time()
+                logger.info("LLM To TTS Complete sentence: ", complete_sentence)
                 llm_service.user_context.append({"role": "assistant", "content": complete_sentence}) #pushing the complete sentence to user context
             except Exception as e:
-                print(f"Error sending chunks to TTS: {e}")
-
+                logger.error(f"Error sending chunks to TTS: {e}")
 
         async def send_audio_chunks_to_twilio(tts_listener):
-            print("TTS to Twilio")
+            logger.info("TTS to Twilio")
             async for audio_chunk in tts_listener:
                 stream_service.set_send_audio(True)
                 await send_audio_to_twilio(audio_chunk)
-            print('TTS processing time: ', time.time() - tts_start_time)
+            logger.info("TTS processing time: ", time.time() - tts_start_time)
             await tts_service.disconnect()
             await tts_service.connect_tts()
 
@@ -164,11 +168,11 @@ async def twilio_handler(client_ws):
                             tts_task = None
                         break
             except Exception as e:
-                print(f"Error listening to TTS: {e}")
+                logger.error(f"Error listening to TTS: {e}")
         
         async def send_audio_to_twilio(audio):
             tts_total_time = time.time() - tts_start_time
-            print(f"TTS processing time: {tts_total_time:.2f} seconds")
+            logger.info(f"TTs processing time: {tts_total_time:.2f} seconds")
             await stream_service.sent_audio(audio)
 
          # Queue for incoming WebSocket messages
@@ -180,12 +184,12 @@ async def twilio_handler(client_ws):
                     data = await client_ws.receive_text()
                     await message_queue.put(json.loads(data))
             except WebSocketDisconnect:
-                print("Client disconnected")
+                logger.info("Client disconnected")
            
 
         async def message_processor():
             """Receives and processes messages from Twilio"""
-            print("Client receiver connected")
+            logger.info("Client receiver connected")
             while True:
                 message = await message_queue.get()
                 try:
@@ -195,18 +199,17 @@ async def twilio_handler(client_ws):
                         stream_service.set_streamsid(message["start"]["streamSid"])
                         audio_content = getAudioContent(initial_message)
                         await stream_service.sent_audio(audio_content)
-                        print("Initial message sent")
-                    elif event_type in ("connected", "start"):
-                        print("Twilio connected or started")
                     elif event_type == "media":
                         asyncio.create_task(process_media(message))
                         #await stop_speaking()
                     elif event_type == "stop":
-                        print("Twilio connection stopped")
+                        logger.info("Twilio connection stopped")
                         await client_ws.close()
+                        await stt_service.disconnect()
+                        await tts_service.disconnect()
                         break
                 except Exception as e:
-                    print(f"Client Receiver Error: {e}")
+                    logger.error(f"Client Receiver Error: {e}")
         
         stt_service.on("transcription", handle_llm)
         stt_service.on('utterance', handle_utterance)
@@ -222,7 +225,7 @@ async def twilio_handler(client_ws):
         await asyncio.gather(listener_task, processor_task)
 
     except Exception as e:
-        print(f"WebSocket Handler Error: {e}")
+        logger.error(f"WebSocket Handler Error: {e}")
     finally:
         await client_ws.close()
-        print("Closed WebSocket connection")
+        logger.info("closed websocket connection")

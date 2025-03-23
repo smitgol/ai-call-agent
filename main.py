@@ -11,6 +11,8 @@ from typing import Dict
 from services.config import initial_message
 from utils import get_twilio_client, check_and_set_initial_message
 from dotenv import load_dotenv
+from logger_config import logger 
+
 
 load_dotenv(override=True)
 
@@ -59,10 +61,12 @@ async def start_call(request: Dict[str, str]):
             #url=service_url
             twiml=twiml
         )
+        logger.info(f"Call initiated to {to_number}")
         return {"status": "success", "message": "Call initiated"}
     except Exception as e:
         print("Error in start_call")
         print(e)
+        logger.error(f"Error in start_call: {e}")
         return {"status": "failed", "message": e}
 
 

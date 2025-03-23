@@ -47,6 +47,13 @@ async def check_and_set_initial_message(initial_message):
         #return safe_filename
     
     # File doesn't exist, generate and save
+    # Create file if it doesn't exist
+    if not os.path.exists(file_path):
+        # Ensure parent directory exists
+        os.makedirs(os.path.dirname(file_path), exist_ok=True)
+        # Create empty file
+        open(file_path, 'a').close()
+
     tts_service = TTSService("twilio")
     content = await tts_service.get_audio(initial_message)
     
