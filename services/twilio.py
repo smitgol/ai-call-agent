@@ -8,7 +8,7 @@ from services.stt import STTService
 from services.tts import TTSService 
 from services.llm import LLMService
 from fastapi import WebSocketDisconnect
-from utils import text_chunker, getAudioContent
+from utils import text_chunker, getAudioContent, get_twilio_client
 import websockets
 from services.config import initial_message
 import audioop
@@ -196,7 +196,11 @@ async def twilio_handler(client_ws):
                     event_type = message.get("event")
 
                     if event_type == "start":
-                        stream_service.set_streamsid(message["start"]["streamSid"])
+                        stream_sid = message['start']['streamSid']
+                        call_sid = message['start']['callSid']
+                        stream_service.set_streamsid(stream_sid)
+                        get_twilio_client().calls(call_sid).recordings.create({"recordingChannels": "dual"})
+
                         audio_content = getAudioContent(initial_message)
                         await stream_service.sent_audio(audio_content)
                     elif event_type == "media":

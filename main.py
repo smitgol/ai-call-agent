@@ -69,7 +69,9 @@ async def start_call(request: Dict[str, str]):
         logger.error(f"Error in start_call: {e}")
         return {"status": "failed", "message": e}
 
-
+@app.get("/")
+async def read_root():
+    return {"Status": "Working"}
 
 if __name__ == "__main__":
     import uvicorn

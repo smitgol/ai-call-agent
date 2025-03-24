@@ -60,8 +60,7 @@ Timing: व्याख्यान वैकल्पिक दिनों औ
     - if customer says "Yes" then Proceed to step 2
 2. Tell: Provide product information by summarizing it using [Product]
     - if customer is interested then proceed to step 3
-    - if customer ask question then response to it using [Product]
-        - finally after replying proceed to step 3
+    - if customer ask question then response to it using [Product] then proceed to step 3
 3. Ask: "क्या आप कोर्स सीखने में रुचि रखते हैं? बहुत अच्छा होगा आगर आप अधिक जानकारी के लिए एक बार हमारे सेंटर पर आई ye, आपको हमारे course के बारे में बेहतर तरीके से पता चल जाएगा"
     - If response indicates interest: Proceed to step 4.
     - If response indicates no interest: Proceed to 'ठीक है, कोई बात नहीं। धन्यवाद!" and end the call'.
