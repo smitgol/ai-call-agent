@@ -48,7 +48,8 @@ async def twilio_handler(client_ws):
             try:
                 is_speech = vad.is_speech(pcm_data, 8000)  # 8000 Hz sample rate
                 if is_speech:
-                    await stop_speaking()
+                    logger.info("Speech detected")
+                    #await stop_speaking()
             except Exception as e:
                 logger.error(f"VAD error: {e}")
 
@@ -60,14 +61,8 @@ async def twilio_handler(client_ws):
         async def handle_utterance(text, stream_sid):
             try:
                 if len(marks) > 0 and text.strip():
-                    payload = {
-                        "streamSid": stream_sid,
-                        "event": "clear",
-                    }
-                    await client_ws.send_json(payload)
-                    
-                    # reset states
-                    stream_service.reset()
+                    logger.info("utterance detected")
+                    #await stop_speaking()
             except Exception as e:
                 logger.error(f"Error handling utterance: {e}")
         
@@ -104,6 +99,21 @@ async def twilio_handler(client_ws):
             #await llm_service.completion(transcript)
             await llm_service.complete_with_chunks(transcript)
 
+        async def handle_tool_call(tool_name):
+            try:
+                if tool_name == "end_call":
+                    call_sid = stream_service.get_call_sid()
+                    if call_sid:
+                        get_twilio_client().calls(call_sid).update(status="completed")
+                        logger.info("Call ended by tool call")
+                        # Close connections
+                        await client_ws.close()
+                        await stt_service.disconnect()
+                        await tts_service.disconnect()
+            except Exception as e:
+                logger.error(f"Error handling tool call: {e}")
+        
+        # TO BE USED WHEN USING TTS BY API
         # async def handle_tts(text):
         #     try:
         #         nonlocal tts_start_time
@@ -124,10 +134,12 @@ async def twilio_handler(client_ws):
                 tts_task = asyncio.create_task(send_audio_chunks_to_twilio(tts_listener()))
                 complete_sentence = ""
                 nonlocal tts_start_time
-                async for text in text_chunker(text_iterator):
+                async for text in text_chunker(text_iterator, llm_service):
                     complete_sentence += text
                     try:
-                        await tts_service.tts_ws.send(json.dumps({"text": text}))
+                        if text != "":
+                            logger.info(f"LLM to TTS: {text}")
+                            await tts_service.tts_ws.send(json.dumps({"text": text}))
                     except websockets.exceptions.ConnectionClosedOK:
                         logger.error(f"Error sending text to TTS: {e}")
                 await tts_service.end_tts_streaming(tts_service.tts_ws)
@@ -219,6 +231,7 @@ async def twilio_handler(client_ws):
         stt_service.on('utterance', handle_utterance)
         #llm_service.on("llm_response", handle_tts) #only use when we using llm by api
         llm_service.on("llm_stream", send_chunks_to_tts)
+        llm_service.on("tool_call", handle_tool_call)
         #tts_service.on("audio", send_audio_to_twilio) #only when we using tts by api
         stream_service.on('audiosent', handle_audio_sent)
 
@@ -231,5 +244,5 @@ async def twilio_handler(client_ws):
     except Exception as e:
         logger.error(f"WebSocket Handler Error: {e}")
     finally:
-        await client_ws.close()
+        #await client_ws.close()
         logger.info("closed websocket connection")

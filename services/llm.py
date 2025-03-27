@@ -4,6 +4,22 @@ from services.config import GROQ_API_KEY, PROMPT  # Changed from relative to abs
 
 GROQ_API_KEY = GROQ_API_KEY
 
+
+tool_list = [
+    {
+        "type": "function",
+        "function": {
+            "name": "end_call",
+            "description": "Ends the current phone call or conversation",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "required": []
+            }        
+        },
+    }
+]
+
     
 
 class LLMService(EventEmitter):
@@ -24,7 +40,9 @@ class LLMService(EventEmitter):
                 messages=self.user_context,
                 stream=True,
                 max_tokens=125,
-                temperature=0.7,)
+                temperature=0.7,
+                tools=tool_list,
+                tool_choice="auto",)
             complete_response = ""
 
             async for chunk in stream:
@@ -45,13 +63,21 @@ class LLMService(EventEmitter):
                 model=self.model,
                 messages=self.user_context,
                 stream=True,
-                max_tokens=125,
-                temperature=0.7,)
+                max_tokens=275,
+                temperature=0.7,
+                tools=tool_list,
+                tool_choice="auto",)
             await self.emit('llm_stream', stream)
 
         except Exception as e:
             print("Error generating LLM response:", str(e))
             return None
-
+    
+    def trigger_tool(self, tool_name):
+        try:
+            self.emit('tool_triggered', tool_name)
+        except Exception as e:
+            print("Error triggering tool:", str(e))
+            return None
 
 

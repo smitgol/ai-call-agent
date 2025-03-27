@@ -4,16 +4,24 @@ from services.tts import TTSService
 import base64
 import time
 from dotenv import load_dotenv
+import logging
 
+logger = logging.getLogger(__name__)
 load_dotenv(override=True)
 
-async def text_chunker(chunks):
+async def text_chunker(chunks, llm_service):
     """Split text into chunks, ensuring to not break sentences."""
     splitters = (".", ",", "?", "!", ";", ":", "—", "-", "(", ")", "[", "]", "}", " ")
     buffer = ""
     try:
         async for text in chunks:
             delta = text.choices[0].delta
+            #logger.info(f"Delta: {delta}")
+            if delta.tool_calls:
+                for tool_call in delta.tool_calls:
+                    if tool_call.function.name:
+                        llm_service.trigger_tool("tool_call", tool_call.function.name)
+                        logger.info(f"Function: {tool_call.function.name}")
             content = delta.content or ""
             if buffer.endswith(splitters):
                 yield buffer + ""

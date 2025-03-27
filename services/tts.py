@@ -14,7 +14,7 @@ class TTSService(EventEmitter):
 
     def __init__(self, type):
         super().__init__()
-        self.voice_id = "nUagRYBWb90CoyEXd8zt"
+        self.voice_id = "1qEiC6qsybMkmnNdVMbK"
         self.model_id = "eleven_turbo_v2_5"
         self.language_code = "hi"
         self.type = type
