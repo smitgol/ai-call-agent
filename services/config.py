@@ -16,6 +16,9 @@ TWILIO_AUTH_TOKEN = os.environ['TWILIO_AUTH_TOKEN']
 #inital message
 initial_message = "नमस्कार मैं पूजा बात कर रही हूं एरेना एनिमेशन से"
 
+#Defailt message to ask user to repeat
+repeat_message = "मुझे समझ नहीं आया, कृपया फिर से कहें।"
+
 
 #prompt
 PROMPT = '''

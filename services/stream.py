@@ -9,12 +9,19 @@ class StreamService(EventEmitter):
         self.stream_sid = None
         self.ws = websocket
         self.sending_audio = False
+        self.call_sid = None
 
     def set_streamsid(self, streamsid):
         self.stream_sid = streamsid
     
     def get_streamsid(self):
         return self.stream_sid
+    
+    def set_callsid(self, callsid):
+        self.call_sid = callsid
+
+    def get_callsid(self):
+        return self.call_sid
     
     def set_send_audio(self, status):
         self.sending_audio = status

@@ -16,12 +16,10 @@ async def text_chunker(chunks, llm_service):
     try:
         async for text in chunks:
             delta = text.choices[0].delta
-            #logger.info(f"Delta: {delta}")
             if delta.tool_calls:
                 for tool_call in delta.tool_calls:
-                    if tool_call.function.name:
-                        llm_service.trigger_tool("tool_call", tool_call.function.name)
-                        logger.info(f"Function: {tool_call.function.name}")
+                    if tool_call.function.name != "":
+                        await llm_service.trigger_tool(tool_call.function.name)
             content = delta.content or ""
             if buffer.endswith(splitters):
                 yield buffer + ""
@@ -36,7 +34,7 @@ async def text_chunker(chunks, llm_service):
             yield buffer + " "
     except Exception as e:
         print("Error in text_chunker")
-        print(e)
+        logger.error("Error in text_chunker: %s", str(e))
    
 def get_twilio_client():
     account_sid = os.environ["TWILIO_ACCOUNT_SID"]

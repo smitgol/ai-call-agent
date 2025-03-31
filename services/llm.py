@@ -1,6 +1,9 @@
 from groq import AsyncGroq
 from services.event_emmiter import EventEmitter
 from services.config import GROQ_API_KEY, PROMPT  # Changed from relative to absolute import
+import logging
+
+logger = logging.getLogger(__name__)
 
 GROQ_API_KEY = GROQ_API_KEY
 
@@ -73,9 +76,10 @@ class LLMService(EventEmitter):
             print("Error generating LLM response:", str(e))
             return None
     
-    def trigger_tool(self, tool_name):
+    async def trigger_tool(self, tool_name):
         try:
-            self.emit('tool_triggered', tool_name)
+            logger.info(f"tool_triggered : {tool_name}")
+            await self.emit('tool_triggered', tool_name)
         except Exception as e:
             print("Error triggering tool:", str(e))
             return None

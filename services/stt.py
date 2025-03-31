@@ -2,6 +2,9 @@ import websockets
 from services.event_emmiter import EventEmitter
 from deepgram import DeepgramClient, LiveOptions, LiveTranscriptionEvents, DeepgramClientOptions
 from services.config import DEEPGRAM_API_KEY
+import logging
+
+logger = logging.getLogger(__name__)
 
 class STTService(EventEmitter):
 
@@ -21,21 +24,26 @@ class STTService(EventEmitter):
         self._for = TYPE
 
     async def connect(self):
-        self.deepgram_live = self.client.listen.asyncwebsocket.v("1")
+        try:
+            self.deepgram_live = self.client.listen.asyncwebsocket.v("1")
+        except Exception as e:
+            logger.error(f"Error connecting to Deepgram: {e}")
         if self._for == "twilio":
-            
-            await self.deepgram_live.start(LiveOptions(
-                language=self.language, 
-                encoding=self.encoding,
-                sample_rate=8000,
-                channels=1,
-                punctuate=True,
-                interim_results=True,
-                endpointing=200,
-                utterance_end_ms=1000,
-                model=self.model,
-                vad_events=True,
-            ))
+            try:
+                await self.deepgram_live.start(LiveOptions(
+                    language=self.language, 
+                    encoding=self.encoding,
+                    sample_rate=8000,
+                    channels=1,
+                    punctuate=True,
+                    interim_results=True,
+                    endpointing=180,
+                    utterance_end_ms=1000,
+                    model=self.model,
+                    vad_events=True,
+                ))
+            except Exception as e:
+                logger.error(f"Error starting Deepgram live: {e}")
             
         else:
             await self.deepgram_live.start(LiveOptions(
@@ -52,12 +60,13 @@ class STTService(EventEmitter):
         self.deepgram_live.on(LiveTranscriptionEvents.UtteranceEnd, self.handle_utterance_end)
 
     async def handle_speech_started(self, self_obj, speech_started):
+        logger.info("speech started")
         pass
     
     async def handle_utterance_end(self, self_obj, utterance_end):
         try:
-            print("Utterance end")
             if not self.speech_final:
+                logger.info("utterance in handle utterance end")
                 await self.emit('utterance', self.final_result)
                 self.final_result = ''
                 self.speech_final = True
@@ -83,7 +92,7 @@ class STTService(EventEmitter):
             else:
                 if text.strip():
                     stream_sid = self.stream_sid
-                    await self.emit('utterance', text, stream_sid)
+                   # await self.emit('utterance', text, stream_sid)
         except Exception as e:
             e.print_stack()
 

@@ -14,12 +14,13 @@ class TTSService(EventEmitter):
 
     def __init__(self, type):
         super().__init__()
-        self.voice_id = "1qEiC6qsybMkmnNdVMbK"
+        self.voice_id = "MF4J4IDTRo0AxOO4dpFR"
         self.model_id = "eleven_turbo_v2_5"
         self.language_code = "hi"
         self.type = type
         self.output_format =  "mp3_44100_128" if self.type == "assistant" else "ulaw_8000"
         self.tts_ws = None
+        self.timeout = 180
 
     async def get_audio(self, text):
         try:
@@ -43,17 +44,17 @@ class TTSService(EventEmitter):
                     if response.status == 200:
                         audio_content = await response.read()
                         if self.type != "assistant":
-                            audio_content = base64.b64encode(audio_content)
+                            audio_content_encoded = base64.b64encode(audio_content)
                             decoded_audio_content = base64.b64encode(audio_content).decode('utf-8')
                         await self.emit('audio', decoded_audio_content)
-                        return audio_content
+                        return audio_content_encoded
                     else:
                         print(f"Error getting audio: {response}")
         except Exception as e:
             print(f"Error getting audio: {e}")
     
     async def connect_tts(self):
-        uri = f"wss://api.elevenlabs.io/v1/text-to-speech/{self.voice_id}/stream-input?model_id={self.model_id}&output_format={self.output_format}&optimize_streaming_latency=4&language_code={self.language_code}"
+        uri = f"wss://api.elevenlabs.io/v1/text-to-speech/{self.voice_id}/stream-input?model_id={self.model_id}&output_format={self.output_format}&optimize_streaming_latency=4&language_code={self.language_code}&inactivity_timeout={self.timeout}"
         tts_ws = await websockets.connect(uri)
         self.tts_ws = tts_ws
         await tts_ws.send(json.dumps({
