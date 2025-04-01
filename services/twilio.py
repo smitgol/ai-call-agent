@@ -69,7 +69,7 @@ async def twilio_handler(client_ws):
                         model,
                         sampling_rate=SAMPLING_RATE,
                         threshold=0.4,  # Lowered threshold
-                        min_speech_duration_ms=100  # Adjust as needed
+                        min_speech_duration_ms=300  # Adjust as needed
                     )
                     if speech_segments:
                         logger.info("Speech detected")
@@ -86,11 +86,10 @@ async def twilio_handler(client_ws):
 
         async def handle_utterance(text):
             try:
-                if len(marks) > 0 and text.strip():
 
-                    logger.info("utterance detected")
-                    await speak_default_text()
-                    #await stop_speaking()
+                logger.info("utterance detected")
+                await speak_default_text()
+                #await stop_speaking()
             except Exception as e:
                 logger.error(f"Error handling utterance: {e}")
         
@@ -158,20 +157,27 @@ async def twilio_handler(client_ws):
                 if tts_task:
                     tts_task.cancel()
                 if tts_service.tts_ws is None:
+                    logger.info("TTS WebSocket is None, reconnecting...")
                     await tts_service.connect_tts()
+                if tts_service.tts_ws:
+                    tts_service.disconnect()
+                    tts_service.connect_tts()
+                    logger.info("TTS WebSocket reconnected")
                 tts_task = asyncio.create_task(send_audio_chunks_to_twilio(tts_listener()))
                 complete_sentence = ""
                 nonlocal tts_start_time
                 async for text in text_chunker(text_iterator, llm_service):
                     complete_sentence += text
-                    try:
-                        if text != "":
-                            logger.info(f"LLM to TTS: {text}")
+                    if text:  # Skip empty strings
+                        logger.info(f"LLM to TTS: {text}")
+                        try:
                             await tts_service.tts_ws.send(json.dumps({"text": text}))
-                    except websockets.exceptions.ConnectionClosedOK:
-                        logger.error(f"Error sending text to TTS: {e}")
-                await tts_service.end_tts_streaming(tts_service.tts_ws)
+                        except websockets.exceptions.ConnectionClosed:
+                            logger.error("TTS WebSocket closed, reconnecting...")
+                            await tts_service.connect_tts()
+                            await tts_service.tts_ws.send(json.dumps({"text": text}))
                 logger.info("LLm processing time: ", time.time() - llm_start_time)
+                await tts_service.end_tts_streaming(tts_service.tts_ws)
                 await tts_task
                 tts_start_time = time.time()
                 logger.info("LLM To TTS Complete sentence: ", complete_sentence)
@@ -181,6 +187,7 @@ async def twilio_handler(client_ws):
 
         async def send_audio_chunks_to_twilio(tts_listener):
             logger.info("TTS to Twilio")
+            nonlocal tts_start_time
             async for audio_chunk in tts_listener:
                 stream_service.set_send_audio(True)
                 await send_audio_to_twilio(audio_chunk)
@@ -212,17 +219,14 @@ async def twilio_handler(client_ws):
                         pass
                     elif data.get('isFinal'):
                         #send_audio_to_twilio("")
-                        if tts_task:
-                            stream_service.set_send_audio(True)
-                            tts_task.cancel()
-                            tts_task = None
+                        stream_service.set_send_audio(True)
                         break
             except Exception as e:
                 logger.error(f"Error listening to TTS: {e}")
         
         async def send_audio_to_twilio(audio):
             tts_total_time = time.time() - tts_start_time
-            logger.info(f"TTs processing time: {tts_total_time:.2f} seconds")
+            #logger.info(f"TTs processing time: {tts_total_time:.2f} seconds")
             await stream_service.sent_audio(audio)
         
         async def end_call():
