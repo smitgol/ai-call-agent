@@ -20,7 +20,7 @@ class TTSService(EventEmitter):
         self.type = type
         self.output_format =  "mp3_44100_128" if self.type == "assistant" else "ulaw_8000"
         self.tts_ws = None
-        self.timeout = 180
+        self.timeout = 360
 
     async def get_audio(self, text):
         try:
@@ -64,7 +64,7 @@ class TTSService(EventEmitter):
         }))
 
     async def close(self):
-        await self.tts_ws.__aexit__()
+        await self.tts_ws.close()
 
     async def handle_error(self, error):
         print(f"Error: {error}")
@@ -79,11 +79,14 @@ class TTSService(EventEmitter):
         print(f"Metadata: {metadata}")
     
     async def end_tts_streaming(self, tts_ws):
-        await tts_ws.send(json.dumps({"text": ""}))
+        try:
+            await tts_ws.send(json.dumps({"text": ""}))
+        except Exception as e:
+            print(f"Error ending TTS streaming: {e}")
+
     
     async def disconnect(self):
+        if self.tts_ws is None:
+            return
         await self.tts_ws.close()
         self.tts_ws = None
-
-
-

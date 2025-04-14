@@ -1,6 +1,6 @@
 from groq import AsyncGroq
 from services.event_emmiter import EventEmitter
-from services.config import GROQ_API_KEY, PROMPT  # Changed from relative to absolute import
+from services.config import GROQ_API_KEY, PROMPT, LLM_MODEL  # Changed from relative to absolute import
 import logging
 
 logger = logging.getLogger(__name__)
@@ -33,7 +33,7 @@ class LLMService(EventEmitter):
             {"role": "system", "content": self.system_message}
         ]
         self.llm = AsyncGroq(api_key=GROQ_API_KEY)
-        self.model = "llama-3.3-70b-versatile"
+        self.model = LLM_MODEL
 
     async def completion(self, text):
         try:
@@ -42,7 +42,7 @@ class LLMService(EventEmitter):
                 model=self.model,
                 messages=self.user_context,
                 stream=True,
-                max_tokens=125,
+                max_tokens=1000,
                 temperature=0.7,
                 tools=tool_list,
                 tool_choice="auto",)

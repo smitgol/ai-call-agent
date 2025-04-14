@@ -5,3 +5,4 @@ __pycache__
 *.ipynb
 saved_initial_message
 app.log
+call_transcriptions/

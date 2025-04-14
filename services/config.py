@@ -76,6 +76,9 @@ Price: हमारे कोर्स 50,000 रुपये से शुर�
 - Trigger the end_call Function.
 '''
 
+## LLM Configuration
+LLM_MODEL = "meta-llama/llama-4-maverick-17b-128e-instruct"
+
 # Validate required environment variables
 required_vars = [
     'DEEPGRAM_API_KEY',

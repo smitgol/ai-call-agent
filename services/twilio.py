@@ -17,7 +17,7 @@ import logging
 import uuid
 import torch
 import numpy as np
-
+from .call_transcription import TranscriptionLogger
 # Load the Silero VAD model and its utility functions.
 # This will download the model if it isn't already cached.
 model, utils = torch.hub.load('snakers4/silero-vad', 'silero_vad', force_reload=False)
@@ -48,6 +48,8 @@ async def twilio_handler(client_ws):
     end_call_after_this_mark = None
     audio_buffer = np.array([], dtype=np.float32)
 
+    #var for log
+    transcription_logger = None
     try:
 
         async def process_media(msg):
@@ -86,8 +88,6 @@ async def twilio_handler(client_ws):
 
         async def handle_utterance(text):
             try:
-
-                logger.info("utterance detected")
                 await speak_default_text()
                 #await stop_speaking()
             except Exception as e:
@@ -108,7 +108,6 @@ async def twilio_handler(client_ws):
                         stream_service.set_send_audio(False)
                         stream_service.reset()
                         marks.clear()
-                        logger.info("Stopped speaking")
                         if tts_service.tts_ws:
                             await tts_service.disconnect()
                             await tts_service.connect_tts()
@@ -117,17 +116,19 @@ async def twilio_handler(client_ws):
                 logger.error(f"Error stopping speaking: {e}")
 
         async def speak_default_text():
-            logger.info("Speaking default text")
+            if transcription_logger:
+                    transcription_logger.add_entry("LLM", "Speaking default text")
             await tts_service.get_audio(repeat_message)
 
         async def handle_llm(transcript):
             nonlocal llm_start_time
             stt_total_time = time.time() - stt_start_time
             logger.info(f"STT processing time: {stt_total_time:.2f} seconds")
-            logger.info(f"STT to LLM: {transcript}")
             llm_start_time = time.time()
-            logger.info("STT to LLM")
             #await llm_service.completion(transcript)
+            nonlocal transcription_logger
+            if transcription_logger:
+                transcription_logger.add_entry("STT", transcript)
             await llm_service.complete_with_chunks(transcript)
 
         async def handle_tool_call(tool_name):
@@ -154,46 +155,46 @@ async def twilio_handler(client_ws):
         async def send_chunks_to_tts(text_iterator):
             try:
                 nonlocal tts_task
+                nonlocal llm_start_time
+                nonlocal tts_start_time
                 if tts_task:
                     tts_task.cancel()
-                if tts_service.tts_ws is None:
-                    logger.info("TTS WebSocket is None, reconnecting...")
-                    await tts_service.connect_tts()
-                if tts_service.tts_ws:
-                    tts_service.disconnect()
-                    tts_service.connect_tts()
-                    logger.info("TTS WebSocket reconnected")
+
+                tts_service.disconnect()
+                tts_service.connect_tts()
                 tts_task = asyncio.create_task(send_audio_chunks_to_twilio(tts_listener()))
                 complete_sentence = ""
-                nonlocal tts_start_time
                 async for text in text_chunker(text_iterator, llm_service):
                     complete_sentence += text
                     if text:  # Skip empty strings
-                        logger.info(f"LLM to TTS: {text}")
                         try:
                             await tts_service.tts_ws.send(json.dumps({"text": text}))
-                        except websockets.exceptions.ConnectionClosed:
+                            logger.info(f"Sent text to TTS: {text}")
+                        except Exception as e:
+                            logger.error(f"Error sending text to TTS: {e} {text}")
                             logger.error("TTS WebSocket closed, reconnecting...")
+                            tts_task.cancel()
                             await tts_service.connect_tts()
                             await tts_service.tts_ws.send(json.dumps({"text": text}))
+                llm_service.user_context.append({"role": "assistant", "content": complete_sentence}) #pushing the complete sentence to user context
+                if transcription_logger:
+                    transcription_logger.add_entry("LLM", complete_sentence)
+                    logger.info("added to transcription log")
                 logger.info("LLm processing time: ", time.time() - llm_start_time)
-                await tts_service.end_tts_streaming(tts_service.tts_ws)
+                if tts_service.tts_ws:
+                    await tts_service.end_tts_streaming(tts_service.tts_ws)
                 await tts_task
                 tts_start_time = time.time()
-                logger.info("LLM To TTS Complete sentence: ", complete_sentence)
-                llm_service.user_context.append({"role": "assistant", "content": complete_sentence}) #pushing the complete sentence to user context
             except Exception as e:
                 logger.error(f"Error sending chunks to TTS: {e}")
 
         async def send_audio_chunks_to_twilio(tts_listener):
-            logger.info("TTS to Twilio")
             nonlocal tts_start_time
             async for audio_chunk in tts_listener:
                 stream_service.set_send_audio(True)
                 await send_audio_to_twilio(audio_chunk)
             # If this is the final message and we're ending the call, send a mark
             if end_call_after_this_mark:
-                logger.info("Sending mark to Twilio")
                 mark_label = end_call_after_this_mark
                 payload = {
                     "event": "mark",
@@ -202,8 +203,6 @@ async def twilio_handler(client_ws):
                 }
                 await client_ws.send_json(payload)
             logger.info("TTS processing time: ", time.time() - tts_start_time)
-            await tts_service.disconnect()
-            await tts_service.connect_tts()
 
 
         
@@ -212,27 +211,30 @@ async def twilio_handler(client_ws):
             nonlocal tts_task
             try:
                 while True:
-                    message = await ws.recv()
-                    data = json.loads(message)
-                    if data.get("audio"):
-                        yield data["audio"]
-                        pass
-                    elif data.get('isFinal'):
-                        #send_audio_to_twilio("")
-                        stream_service.set_send_audio(True)
-                        break
+                    try:
+                        message = await ws.recv()
+                        data = json.loads(message)
+                        if data.get("audio"):
+                            yield data["audio"]
+                            pass
+                        elif data.get('isFinal'):
+                            #send_audio_to_twilio("")
+                            stream_service.set_send_audio(True)
+                            break
+                    except websockets.exceptions.ConnectionClosed:
+                            logger.error("error from tts listener")
+                            break
             except Exception as e:
                 logger.error(f"Error listening to TTS: {e}")
         
         async def send_audio_to_twilio(audio):
             tts_total_time = time.time() - tts_start_time
-            #logger.info(f"TTs processing time: {tts_total_time:.2f} seconds")
             await stream_service.sent_audio(audio)
         
         async def end_call():
             call_sid = stream_service.get_callsid()
             if call_sid:
-                get_twilio_client().calls(call_sid).update(status="completed")
+                #get_twilio_client().calls(call_sid).update(status="completed")
                 logger.info("Call ended by tool call")
                 # Close connections
                 await client_ws.close()
@@ -254,6 +256,7 @@ async def twilio_handler(client_ws):
         async def message_processor():
             """Receives and processes messages from Twilio"""
             logger.info("Client receiver connected")
+            nonlocal transcription_logger
             while True:
                 message = await message_queue.get()
                 try:
@@ -264,8 +267,9 @@ async def twilio_handler(client_ws):
                         call_sid = message['start']['callSid']
                         stream_service.set_streamsid(stream_sid)
                         stream_service.set_callsid(call_sid)
-                        get_twilio_client().calls(call_sid).recordings.create({"recordingChannels": "dual"})
-
+                       # get_twilio_client().calls(call_sid).recordings.create({"recordingChannels": "dual"})
+                        transcription_logger = TranscriptionLogger(call_sid)
+                        # Set connection ID in context
                         audio_content = getAudioContent(initial_message)
                         await stream_service.sent_audio(audio_content)
                     elif event_type == "media":
@@ -276,6 +280,8 @@ async def twilio_handler(client_ws):
                             await end_call()
                     elif event_type == "stop":
                         logger.info("Twilio connection stopped")
+                        if transcription_logger:
+                            await transcription_logger.save_to_file()
                         await client_ws.close()
                         await stt_service.disconnect()
                         await tts_service.disconnect()
