@@ -18,8 +18,8 @@ class STTService(EventEmitter):
         self.final_result = ""
         self.speech_final = False
         self.stream_sid = None
-        self.language = "hi"
-        self.model = "nova-2"
+        self.language = "multi"
+        self.model = "nova-3"
         self.encoding = "mulaw"
         self._for = TYPE
 

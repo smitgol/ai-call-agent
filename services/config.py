@@ -77,7 +77,7 @@ Price: हमारे कोर्स 50,000 रुपये से शुर�
 '''
 
 ## LLM Configuration
-LLM_MODEL = "meta-llama/llama-4-maverick-17b-128e-instruct"
+LLM_MODEL = "llama-3.3-70b-versatile"
 
 # Validate required environment variables
 required_vars = [

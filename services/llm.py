@@ -66,7 +66,7 @@ class LLMService(EventEmitter):
                 model=self.model,
                 messages=self.user_context,
                 stream=True,
-                max_tokens=275,
+                max_tokens=1000,
                 temperature=0.7,
                 tools=tool_list,
                 tool_choice="auto",)
