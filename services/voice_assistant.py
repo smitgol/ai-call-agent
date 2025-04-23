@@ -2,7 +2,7 @@ import asyncio
 import json
 import time
 from fastapi import WebSocketDisconnect
-from services.stt import STTService
+#from services.stt import STTService
 from services.tts import TTSService 
 from services.llm import LLMService
 
@@ -10,6 +10,7 @@ from services.llm import LLMService
 
 
 async def voice_assistant_handler(ws):
+    '''
     try:
         stt_service = STTService("assistant")
         llm_service = LLMService()
@@ -81,3 +82,4 @@ async def voice_assistant_handler(ws):
     except WebSocketDisconnect:
         print("Client disconnected")
         await ws.close()
+    '''

@@ -1,11 +1,14 @@
 import websockets
 from services.event_emmiter import EventEmitter
 from deepgram import DeepgramClient, LiveOptions, LiveTranscriptionEvents, DeepgramClientOptions
-from services.config import DEEPGRAM_API_KEY
+from services.config import DEEPGRAM_API_KEY, ASSEMBLY_API_KEY, OPENAI_API_KEY
 import logging
-
 logger = logging.getLogger(__name__)
 
+
+
+
+'''
 class STTService(EventEmitter):
 
     def __init__(self, TYPE):
@@ -37,10 +40,11 @@ class STTService(EventEmitter):
                     channels=1,
                     punctuate=True,
                     interim_results=True,
-                    endpointing=180,
+                    endpointing=400,
                     utterance_end_ms=1000,
                     model=self.model,
                     vad_events=True,
+                    smart_format=True,
                 ))
             except Exception as e:
                 logger.error(f"Error starting Deepgram live: {e}")
@@ -91,6 +95,7 @@ class STTService(EventEmitter):
                     self.speech_final = False
             else:
                 if text.strip():
+                    logger.info(f"interim result: {text}")
                     stream_sid = self.stream_sid
                    # await self.emit('utterance', text, stream_sid)
         except Exception as e:
@@ -109,14 +114,53 @@ class STTService(EventEmitter):
     async def handle_close(self, self_obj, close):
         pass
 
-    async def send(self, payload: bytes):
+    async def stream(self, payload: bytes):
         if self.deepgram_live:            
             await self.deepgram_live.send(payload)
     
-    async def disconnect(self):
+    async def close(self):
         if self.deepgram_live:
             await self.deepgram_live.finish()
             self.deepgram_live = None
         self.is_connected = False
         pass
+'''
 
+async def deepgram_connect():
+ extra_headers = {
+  'Authorization': 'Token ' + DEEPGRAM_API_KEY,
+ }
+ deepgram_ws = await websockets.connect('wss://api.deepgram.com/v1/listen?encoding=mulaw&sample_rate=8000&channels=1&endpointing=200&utterance_end_ms=1000&interim_results=true&model=nova-3&language=multi&smart_format=true', extra_headers = extra_headers)
+
+ return deepgram_ws
+
+
+
+
+async def openai_stt_connect():
+ OPENAI_WS_URL   = (
+    "wss://api.openai.com/v1/realtime"
+    "?intent=transcription"
+    )
+ API_KEY_HEADER  = {
+        "Authorization": f"Bearer {OPENAI_API_KEY}",
+        "OpenAI-Beta": "realtime=v1"
+    }
+ openai_ws = await websockets.connect(OPENAI_WS_URL, extra_headers=API_KEY_HEADER)
+ return openai_ws
+
+def openai_ws_config():
+   session_update = {
+        "type": "transcription_session.update",
+        "session": {
+            "input_audio_format": "g711_ulaw",
+            "input_audio_transcription": {"model": "gpt-4o-transcribe", "language": "hi"},
+            "turn_detection": {
+                "type": "server_vad",
+                "threshold": 0.5,
+                "prefix_padding_ms": 300,
+                "silence_duration_ms": 500,
+            },
+        }
+    }
+   return session_update

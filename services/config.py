@@ -8,6 +8,8 @@ load_dotenv(override=True)
 DEEPGRAM_API_KEY = os.environ['DEEPGRAM_API_KEY']
 GROQ_API_KEY = os.environ['GROQ_API_KEY']
 ELEVENLABS_API_KEY = os.environ['ELEVENLABS_API_KEY']
+ASSEMBLY_API_KEY = os.environ['ASSEMBLY_API_KEY']
+OPENAI_API_KEY = os.environ['OPENAI_API_KEY']
 
 # Twilio Credentials
 TWILIO_ACCOUNT_SID = os.environ['TWILIO_ACCOUNT_SID']

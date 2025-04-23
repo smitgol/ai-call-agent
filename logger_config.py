@@ -15,7 +15,7 @@ LOGGING_CONFIG = {
         "console": {
             "class": "logging.StreamHandler",
             "formatter": "detailed",
-            "level": "DEBUG",
+            "level": "ERROR",
             "stream": "ext://sys.stdout",
         },
         "file": {
@@ -29,7 +29,7 @@ LOGGING_CONFIG = {
         },
     },
     "root": {
-        "handlers": ["console", "file"],
+        "handlers": ["file"],
         "level": "DEBUG",
     },
     "loggers": {

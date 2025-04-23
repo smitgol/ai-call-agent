@@ -4,7 +4,7 @@ import base64
 import time
 from collections import deque
 from services.stream import StreamService
-from services.stt import STTService
+from services.stt import deepgram_connect, openai_stt_connect, openai_ws_config
 from services.tts import TTSService 
 from services.llm import LLMService
 from fastapi import WebSocketDisconnect
@@ -18,6 +18,8 @@ import uuid
 import torch
 import numpy as np
 from .call_transcription import TranscriptionLogger
+from pydub import AudioSegment
+
 # Load the Silero VAD model and its utility functions.
 # This will download the model if it isn't already cached.
 model, utils = torch.hub.load('snakers4/silero-vad', 'silero_vad', force_reload=False)
@@ -30,6 +32,7 @@ logger = logging.getLogger(__name__)
 
 async def twilio_handler(client_ws):
     outbox = asyncio.Queue()
+    audio_queue = asyncio.Queue()
     #streamsid_queue = asyncio.Queue()
 
     stt_start_time = 0.0  # Initialize here so both functions can access it
@@ -37,8 +40,11 @@ async def twilio_handler(client_ws):
     tts_start_time = 0.0
 
     stream_service = StreamService(client_ws)
-    stt_service = STTService("twilio")
-    await stt_service.connect()
+    #stt_service = STTService("twilio")
+    stt_service = await openai_stt_connect()
+    await stt_service.send(json.dumps(openai_ws_config()))
+    logger.info(stt_service)
+    #await stt_service.connect()
 
     llm_service = LLMService()
     tts_service = TTSService("twilio")
@@ -47,17 +53,54 @@ async def twilio_handler(client_ws):
     tts_task = None
     end_call_after_this_mark = None
     audio_buffer = np.array([], dtype=np.float32)
+    audio_cursor = 0.
 
     #var for log
     transcription_logger = None
     try:
 
+        ## Region STT 
+        async def stt_sender(deepgram_ws):
+            print('started deepgram sender')
+            while True:
+                chunk = await outbox.get()
+                await deepgram_ws.send(chunk)
+                print('sent audio to deepgram')
+
+        async def stt_receiver(deepgram_ws):
+            nonlocal audio_cursor
+            async for message in deepgram_ws:
+                try:
+                    dg_json = json.loads(message)
+                    print(dg_json)
+                    # print the results from deepgram!
+                    if dg_json['type'] == "conversation.item.input_audio_transcription.completed":
+                        transcription = dg_json['transcript']
+                        if transcription.strip():
+                            if transcription_logger:
+                                transcription_logger.add_entry("STT", transcription)
+                            await llm_service.complete_with_chunks(transcription)
+                    elif dg_json['type'] == "input_audio_buffer.speech_started":
+                        print('speech started')
+                        await stop_speaking()
+                    '''
+                    if dg_json["is_final"] == True:
+                        transcript = dg_json["channel"]["alternatives"][0]["transcript"]
+                        if transcript.strip():
+                            if transcription_logger:
+                                transcription_logger.add_entry("STT", transcript)
+                                #logger.info("stt transcript: ", transcript)
+                            print('final transcript: ' + transcript)
+                            await llm_service.complete_with_chunks(transcript)
+                    '''
+                except:
+                    print('was not able to parse deepgram response as json')
+                    continue
+            print('finished deepgram receiver')
         async def process_media(msg):
-            nonlocal stt_start_time
             nonlocal audio_buffer
-            stt_start_time = time.time()
             raw_data = base64.b64decode(msg['media']['payload'])
-            await stt_service.send(raw_data)
+            #stt_service.stream(raw_data)
             pcm_data = audioop.ulaw2lin(raw_data, 2)
     
             # Convert and normalize
@@ -120,6 +163,8 @@ async def twilio_handler(client_ws):
                     transcription_logger.add_entry("LLM", "Speaking default text")
             await tts_service.get_audio(repeat_message)
 
+        # END STT Region
+
         async def handle_llm(transcript):
             nonlocal llm_start_time
             stt_total_time = time.time() - stt_start_time
@@ -160,8 +205,8 @@ async def twilio_handler(client_ws):
                 if tts_task:
                     tts_task.cancel()
 
-                tts_service.disconnect()
-                tts_service.connect_tts()
+                await tts_service.disconnect()
+                await tts_service.connect_tts()
                 tts_task = asyncio.create_task(send_audio_chunks_to_twilio(tts_listener()))
                 complete_sentence = ""
                 async for text in text_chunker(text_iterator, llm_service):
@@ -177,10 +222,12 @@ async def twilio_handler(client_ws):
                             await tts_service.connect_tts()
                             await tts_service.tts_ws.send(json.dumps({"text": text}))
                 llm_service.user_context.append({"role": "assistant", "content": complete_sentence}) #pushing the complete sentence to user context
+                logger.info(f"Complete sentence from llm: {complete_sentence}")
                 if transcription_logger:
                     transcription_logger.add_entry("LLM", complete_sentence)
                     logger.info("added to transcription log")
-                logger.info("LLm processing time: ", time.time() - llm_start_time)
+                total_llm_time = time.time() - llm_start_time
+                logger.info(f"LLM processing time: {total_llm_time:.2f} seconds")
                 if tts_service.tts_ws:
                     await tts_service.end_tts_streaming(tts_service.tts_ws)
                 await tts_task
@@ -202,7 +249,8 @@ async def twilio_handler(client_ws):
                     "mark": {"name": mark_label}
                 }
                 await client_ws.send_json(payload)
-            logger.info("TTS processing time: ", time.time() - tts_start_time)
+            total_tts_time = time.time() - tts_start_time
+            logger.info(f"TTS processing time: {total_tts_time:.2f} seconds")
 
 
         
@@ -238,7 +286,7 @@ async def twilio_handler(client_ws):
                 logger.info("Call ended by tool call")
                 # Close connections
                 await client_ws.close()
-                await stt_service.disconnect()
+                #stt_service.close()
                 await tts_service.disconnect()
 
          # Queue for incoming WebSocket messages
@@ -257,6 +305,10 @@ async def twilio_handler(client_ws):
             """Receives and processes messages from Twilio"""
             logger.info("Client receiver connected")
             nonlocal transcription_logger
+            nonlocal audio_cursor
+            BUFFER_SIZE = 20 * 160
+            buffer = bytearray(b'')
+            empty_byte_received = False
             while True:
                 message = await message_queue.get()
                 try:
@@ -273,7 +325,20 @@ async def twilio_handler(client_ws):
                         audio_content = getAudioContent(initial_message)
                         await stream_service.sent_audio(audio_content)
                     elif event_type == "media":
-                        asyncio.create_task(process_media(message))                    
+                        media = message['media']
+                        chunk = base64.b64decode(media['payload'])
+                        audio_append = {
+                            "type": "input_audio_buffer.append",
+                            "audio": message['media']['payload']
+                        }
+                        if stt_service:
+                            await stt_service.send(json.dumps(audio_append))
+                        #asyncio.create_task(process_media(message))                    
+                        #time_increment = len(chunk) / 8000.0
+                        #audio_cursor += time_increment
+                        #buffer.extend(chunk)
+                        #if chunk == b'':
+                        #    empty_byte_received = True
                     elif event_type == "mark":
                         mark_label = message['mark']['name']
                         if end_call_after_this_mark and mark_label == end_call_after_this_mark:
@@ -283,14 +348,17 @@ async def twilio_handler(client_ws):
                         if transcription_logger:
                             await transcription_logger.save_to_file()
                         await client_ws.close()
-                        await stt_service.disconnect()
+                        #stt_service.close()
                         await tts_service.disconnect()
                         break
+                    if len(buffer) >= BUFFER_SIZE or empty_byte_received:
+                        outbox.put_nowait(buffer)
+                        buffer = bytearray(b'')
                 except Exception as e:
                     logger.error(f"Client Receiver Error: {e}")
         
-        stt_service.on("transcription", handle_llm)
-        stt_service.on('utterance', handle_utterance)
+        #stt_service.on("transcription", handle_llm)
+        #stt_service.on('utterance', handle_utterance)
         #llm_service.on("llm_response", handle_tts) #only use when we using llm by api
         llm_service.on("llm_stream", send_chunks_to_tts)
         llm_service.on("tool_triggered", handle_tool_call)
@@ -300,8 +368,10 @@ async def twilio_handler(client_ws):
 
         listener_task = asyncio.create_task(websocket_listener())
         processor_task = asyncio.create_task(message_processor())
+        #deepgram_task = asyncio.create_task(stt_sender(stt_service))
+        deepgram_receiver_task = asyncio.create_task(stt_receiver(stt_service))
 
-        await asyncio.gather(listener_task, processor_task)
+        await asyncio.gather(listener_task, processor_task, deepgram_receiver_task)
 
     except Exception as e:
         logger.error(f"WebSocket Handler Error: {e}")
