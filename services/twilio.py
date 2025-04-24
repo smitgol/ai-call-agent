@@ -43,7 +43,6 @@ async def twilio_handler(client_ws):
     #stt_service = STTService("twilio")
     stt_service = await openai_stt_connect()
     await stt_service.send(json.dumps(openai_ws_config()))
-    logger.info(stt_service)
     #await stt_service.connect()
 
     llm_service = LLMService()
@@ -319,7 +318,7 @@ async def twilio_handler(client_ws):
                         call_sid = message['start']['callSid']
                         stream_service.set_streamsid(stream_sid)
                         stream_service.set_callsid(call_sid)
-                       # get_twilio_client().calls(call_sid).recordings.create({"recordingChannels": "dual"})
+                        get_twilio_client().calls(call_sid).recordings.create({"recordingChannels": "dual"})
                         transcription_logger = TranscriptionLogger(call_sid)
                         # Set connection ID in context
                         audio_content = getAudioContent(initial_message)
