@@ -281,7 +281,9 @@ async def twilio_handler(client_ws):
         async def end_call():
             call_sid = stream_service.get_callsid()
             if call_sid:
-                #get_twilio_client().calls(call_sid).update(status="completed")
+                if transcription_logger:
+                            await transcription_logger.save_to_file()
+                get_twilio_client().calls(call_sid).update(status="completed")
                 logger.info("Call ended by tool call")
                 # Close connections
                 await client_ws.close()

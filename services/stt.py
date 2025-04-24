@@ -154,12 +154,15 @@ def openai_ws_config():
         "type": "transcription_session.update",
         "session": {
             "input_audio_format": "g711_ulaw",
-            "input_audio_transcription": {"model": "gpt-4o-transcribe", "language": "hi"},
+            "input_audio_transcription": {"model": "gpt-4o-transcribe", "language": "hi", "prompt": "you are a hindi assistant for call transcription.So give me corrected hindi words.Consider hmm as a word and give me the correct hindi words."},
             "turn_detection": {
                 "type": "server_vad",
                 "threshold": 0.5,
                 "prefix_padding_ms": 300,
                 "silence_duration_ms": 400,
+            },
+            "input_audio_noise_reduction": {
+                "type": "near_field"
             },
         }
     }
