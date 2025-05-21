@@ -71,6 +71,7 @@ class LLMService(EventEmitter):
                 tools=tool_list,
                 tool_choice="auto",)
             await self.emit('llm_stream', stream)
+            return stream
 
         except Exception as e:
             print("Error generating LLM response:", str(e))

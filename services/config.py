@@ -10,7 +10,8 @@ GROQ_API_KEY = os.environ['GROQ_API_KEY']
 ELEVENLABS_API_KEY = os.environ['ELEVENLABS_API_KEY']
 ASSEMBLY_API_KEY = os.environ['ASSEMBLY_API_KEY']
 OPENAI_API_KEY = os.environ['OPENAI_API_KEY']
-
+GLADIA_API_KEY = os.environ['GLADIA_API_KEY']
+SENTRY_SDK_URL = os.environ['SENTRY_SDK_URL']
 # Twilio Credentials
 TWILIO_ACCOUNT_SID = os.environ['TWILIO_ACCOUNT_SID']
 TWILIO_AUTH_TOKEN = os.environ['TWILIO_AUTH_TOKEN']
@@ -61,10 +62,8 @@ Timing: क्लासें हर दूसरे दिन होंगी �
 Price: हमारे कोर्स 50,000 रुपये से शुरू होते हैं।
 
 [Conversation Flow]
-1. Ask: "क्या आपने ग्राफिक डिजाइनिंग कोर्स के लिए enquiry सबमिट की थी?"
-    - if customer says "No" then Ask: "क्या आप ग्राफिक डिजाइनिंग, एनिमेशन, VFX या वेब डिजाइनिंग सीखना चाहते हैं?".
-        - if customer says "No", then say: "ठीक है, कोई बात नहीं। धन्यवाद!" and Proceed to the 'Call Closing' section.
-        - if customer says "Yes" then Proceed to step 2
+1. Ask: "क्या आप ग्राफिक डिजाइनिंग, एनिमेशन, VFX या वेब डिजाइनिंग सीखना चाहते हैं?"
+    - if customer says "No", then say: "ठीक है, कोई बात नहीं। धन्यवाद!" and Proceed to the 'Call Closing' section.
     - if customer says "Yes" then Proceed to step 2
 2. Tell: Provide product information by summarizing it using [Product] and tell benefit.start by saying "here is the product information"
     - if customer is interested then proceed to step 3

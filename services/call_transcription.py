@@ -2,7 +2,7 @@ from pathlib import Path
 import aiofiles
 import time
 from typing import List, Tuple
-
+from datetime import datetime
 import logging
 
 logger = logging.getLogger(__name__)
@@ -31,12 +31,8 @@ class TranscriptionLogger:
             # Format all entries first
             formatted = []
             for ts, source, text in self.entries:
-                timestamp = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(ts))
+                timestamp = datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M:%S.%f")
                 formatted.append(f"[{timestamp}] [{source}]: {text}\n")
-
-            logger.info(f"Saving transcription to {self.entries}")
-            print(self.entries)
-
             # Write all at once
             
             async with aiofiles.open(str(transcript_file), "w", encoding="utf-8") as f:

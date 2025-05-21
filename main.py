@@ -12,7 +12,10 @@ from services.config import initial_message
 from utils import get_twilio_client, check_and_set_initial_message
 from dotenv import load_dotenv
 from logger_config import logger 
-
+import json
+from services.pipecat_agent import run_pipecat_agent
+from utils import getAudioContent
+from services.config import initial_message
 
 load_dotenv(override=True)
 
@@ -25,6 +28,36 @@ async def websocket_endpoint(websocket: WebSocket):
         await twilio_handler(websocket)
     except WebSocketDisconnect:
         print("Client disconnected")
+
+@app.websocket("/ws/pipecat")
+async def pipecat_websocket_endpoint(websocket: WebSocket):
+    await websocket.accept()
+    try:
+         # Read initial WebSocket messages
+        start_data = websocket.iter_text()
+        await start_data.__anext__()
+
+        # Second message contains the call details
+        call_data = json.loads(await start_data.__anext__())
+
+        # Extract both StreamSid and CallSid
+        stream_sid = call_data["start"]["streamSid"]
+        call_sid = call_data["start"]["callSid"]
+
+        audio = getAudioContent(initial_message, 'string')
+        payload = {
+            "streamSid": stream_sid,
+            "event": "media",
+            "media": {
+                "payload": audio
+            }
+        }
+        await websocket.send_json(payload)
+        # Run your Pipecat bot
+        await run_pipecat_agent(websocket, stream_sid, call_sid)
+    except WebSocketDisconnect:
+        print("Client disconnected")
+
 
 @app.websocket("/ws/voice-assistant")
 async def voice_assistant_endpoint(websocket: WebSocket):
@@ -50,7 +83,7 @@ async def start_call(request: Dict[str, str]):
     service_url = f"https://{os.environ['SERVER']}/handle-call"
     print("Service URL: ", service_url)
     await check_and_set_initial_message(initial_message)
-    ws_url = f"wss://{os.environ['SERVER']}/ws"
+    ws_url = f"wss://{os.environ['SERVER']}/ws/pipecat"
 
     twiml = f'''<?xml version="1.0" encoding="UTF-8"?><Response><Connect><Stream url="{ws_url}" /></Connect></Response>'''
     try:

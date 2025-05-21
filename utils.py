@@ -13,6 +13,8 @@ async def text_chunker(chunks, llm_service):
     """Split text into chunks, ensuring to not break sentences."""
     splitters = (".", ",", "?", "!", ";", ":", "—", "-", "(", ")", "[", "]", "}", " ")
     buffer = ""
+    complete_response = ""
+    tool_calls = []
     try:
         async for text in chunks:
             delta = text.choices[0].delta
@@ -20,18 +22,22 @@ async def text_chunker(chunks, llm_service):
                 for tool_call in delta.tool_calls:
                     if tool_call.function.name != "":
                         await llm_service.trigger_tool(tool_call.function.name)
+                        tool_calls.append(tool_call.function.name)
             content = delta.content or ""
             if buffer.endswith(splitters):
                 yield buffer + ""
+                complete_response += buffer + ""
                 buffer = content
             elif content.startswith(splitters):
                 yield buffer + content[0] + ""
+                complete_response += buffer + content[0] + ""
                 buffer = content[1:]
             else:
                 buffer += content
             
         if buffer:
             yield buffer + " "
+            complete_response += buffer + " "
     except Exception as e:
         print("Error in text_chunker")
         logger.error("Error in text_chunker: %s", str(e))
@@ -67,13 +73,16 @@ async def check_and_set_initial_message(initial_message):
     with open(file_path, "wb") as f:
         f.write(content)
     
-def getAudioContent(initial_message):
+def getAudioContent(initial_message, ouput_format="bytes"):
     # Convert initial message to base64 for safe filename first
     audio_content_start_time = time.time()
     safe_filename = base64.b64encode(initial_message.encode()).decode()
     file_path = f"saved_initial_message/{safe_filename}.txt"
     with open(file_path, "rb") as f:
         audio_bytes = f.read()
+        if ouput_format == "bytes":
+            print("Audio content read in seconds:", time.time() - audio_content_start_time)
+            # Return the audio content as bytes
+            return audio_bytes
         audio_content = audio_bytes.decode('utf-8')
-        print(f"Audio content processing time: {time.time() - audio_content_start_time:.2f} seconds")
         return audio_content
