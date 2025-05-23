@@ -38,9 +38,10 @@ from pipecat.frames.frames import (
     LLMMessagesFrame,
     LLMTextFrame,
     BotSpeakingFrame,
-    UserStartedSpeakingFrame
+    UserStartedSpeakingFrame,
+    UserStoppedSpeakingFrame
 )
-
+from pipecat.services.groq.stt import GroqSTTService
 
 logger = logging.getLogger(__name__)
 
@@ -64,23 +65,19 @@ class CustomObserver(BaseObserver):
         timestamp = data.timestamp
         dst = data.destination
 
-        if isinstance(data.frame, UserStartedSpeakingFrame):
+        if isinstance(frame, UserStartedSpeakingFrame):
             logger.info(f"👤 {src} -> USER STARTED SPEAKING")
+        elif isinstance(frame, UserStoppedSpeakingFrame):
+            logger.info(f"👤 {src} -> USER STOPPED SPEAKING")
         elif isinstance(frame, TranscriptionFrame):
              logger.info(f"💬 {src} -> TRANSCRIPTION: {frame.text!r} from {frame.user_id!r}")
         
         elif isinstance(frame, (LLMFullResponseStartFrame, LLMFullResponseEndFrame)):
             event = "START" if isinstance(frame, LLMFullResponseStartFrame) else "END"
             logger.info(f"🧠 {src} -> LLM {event} RESPONSE")
-        # Log all LLMTextFrames (output)
         elif isinstance(frame, LLMTextFrame):
             logger.info(f"🧠 {src} -> LLM GENERATING: {frame.text!r}")
-        # Log LLMMessagesFrame (input)
-        elif isinstance(frame, LLMMessagesFrame):
-            logger.info(
-                f"🧠 -> {dst} LLM MESSAGES FRAME: {frame.messages}"
-            )
-        elif isinstance(frame, BotSpeakingFrame):
+        elif isinstance(frame, ElevenLabsTTSService):
             logger.info(f"🤖 {src} -> BOT SPEAKING: {frame}")
 
 
@@ -108,17 +105,20 @@ async def run_pipecat_agent(websocket_client, stream_sid, call_sid):
     )
 
     # Initialize AI services
-    stt = GladiaSTTService(api_key=GLADIA_API_KEY,
-        model="solaria-1",
-        params=GladiaInputParams(
-            language_config=LanguageConfig(
-                languages=[Language.HI],
-                code_switching=True,
-                endpointing=0.05
-            ),
-        ),
-        metrics = SentryMetrics(),
-    )
+    #stt = GladiaSTTService(api_key=GLADIA_API_KEY,
+    #    model="solaria-1",
+    #    params=GladiaInputParams(
+    #        language_config=LanguageConfig(
+    #            languages=[Language.HI],
+    #            code_switching=True,
+    #            endpointing=0.03
+    #        ),
+    #    ),
+    #    metrics = SentryMetrics(),
+    #)
+
+    stt = GroqSTTService(api_key=GROQ_API_KEY, model="whisper-large-v3-turbo", language=Language.HI,prompt="Transcribe the following conversation",temperature=0.0)
+
     llm = GroqLLMService(api_key=GROQ_API_KEY, model=LLM_MODEL, metrics  = SentryMetrics())
 
     tts = ElevenLabsTTSService(
