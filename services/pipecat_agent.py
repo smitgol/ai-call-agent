@@ -117,13 +117,13 @@ async def run_pipecat_agent(websocket_client, stream_sid, call_sid):
     #    metrics = SentryMetrics(),
     #)
 
-    stt = GroqSTTService(api_key=GROQ_API_KEY, model="whisper-large-v3-turbo", language=Language.HI,prompt="Transcribe the following conversation",temperature=0.0)
+    stt = GroqSTTService(api_key=GROQ_API_KEY, model="whisper-large-v3-turbo", language=Language.HI,prompt="",temperature=0.2)
 
-    llm = GroqLLMService(api_key=GROQ_API_KEY, model=LLM_MODEL, metrics  = SentryMetrics())
+    llm = GroqLLMService(api_key=GROQ_API_KEY, model=LLM_MODEL)
 
     tts = ElevenLabsTTSService(
         api_key=ELEVENLABS_API_KEY,
-        voice_id="MF4J4IDTRo0AxOO4dpFR",  # British Reading Lady
+        voice_id="ebAeFZ5UfJ59yFTYEtJ8",  # British Reading Lady
         sample_rate=8000,
         params=ElevenLabsTTSService.InputParams(
             language=Language.HI,
