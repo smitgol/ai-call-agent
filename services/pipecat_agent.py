@@ -123,7 +123,7 @@ async def run_pipecat_agent(websocket_client, stream_sid, call_sid):
 
     tts = ElevenLabsTTSService(
         api_key=ELEVENLABS_API_KEY,
-        voice_id="ebAeFZ5UfJ59yFTYEtJ8",  # British Reading Lady
+        voice_id="ebAeFZ5UfJ59yFTYEtJ8",
         sample_rate=8000,
         params=ElevenLabsTTSService.InputParams(
             language=Language.HI,

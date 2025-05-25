@@ -43,6 +43,7 @@ async def pipecat_websocket_endpoint(websocket: WebSocket):
         # Extract both StreamSid and CallSid
         stream_sid = call_data["start"]["streamSid"]
         call_sid = call_data["start"]["callSid"]
+        get_twilio_client().calls(call_sid).recordings.create({"recordingChannels": "dual"})
 
         audio = getAudioContent(initial_message, 'string')
         payload = {
