@@ -1,3 +1,4 @@
+from uuid import uuid4
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 import asyncio
 from fastapi.staticfiles import StaticFiles
@@ -16,12 +17,14 @@ import json
 from services.pipecat_agent import run_pipecat_agent
 from utils import getAudioContent
 from services.config import initial_message
+from utils import get_db
+
 
 load_dotenv(override=True)
 
 app = FastAPI()
 
-@app.websocket("/ws")
+@app.websocket("/ws/handle_call")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
     try:
@@ -29,8 +32,8 @@ async def websocket_endpoint(websocket: WebSocket):
     except WebSocketDisconnect:
         print("Client disconnected")
 
-@app.websocket("/ws/pipecat")
-async def pipecat_websocket_endpoint(websocket: WebSocket):
+@app.websocket("/ws/pipecat/{session_id}")
+async def pipecat_websocket_endpoint(websocket: WebSocket, session_id: str):
     await websocket.accept()
     try:
          # Read initial WebSocket messages
@@ -55,7 +58,7 @@ async def pipecat_websocket_endpoint(websocket: WebSocket):
         }
         await websocket.send_json(payload)
         # Run your Pipecat bot
-        await run_pipecat_agent(websocket, stream_sid, call_sid)
+        await run_pipecat_agent(websocket, stream_sid, call_sid, session_id)
     except WebSocketDisconnect:
         print("Client disconnected")
 
@@ -80,14 +83,24 @@ async def handle_call():
 
 @app.post("/start_call")
 async def start_call(request: Dict[str, str]):
+    db = get_db()
     to_number = request.get("to_number")
+    prompt = request.get("prompt", initial_message)
+    language = request.get("language", "en")
+    session_id = str(uuid4())
     service_url = f"https://{os.environ['SERVER']}/handle-call"
     print("Service URL: ", service_url)
     await check_and_set_initial_message(initial_message)
-    ws_url = f"wss://{os.environ['SERVER']}/ws/pipecat"
+    ws_url = f"wss://{os.environ['SERVER']}/ws/pipecat/{session_id}"
 
     twiml = f'''<?xml version="1.0" encoding="UTF-8"?><Response><Connect><Stream url="{ws_url}" /></Connect></Response>'''
     try:
+        await db.call_configs.insert_one({
+            "session_id":session_id,
+            "to_number": to_number,
+            "prompt": prompt,
+            "language": language,
+        })
         twilio_client = get_twilio_client()
         call = twilio_client.calls.create(
             to=to_number,  # Person A

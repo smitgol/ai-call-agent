@@ -5,7 +5,11 @@ import base64
 import time
 from dotenv import load_dotenv
 import logging
+from motor.motor_asyncio import AsyncIOMotorClient
+from services.config import MONGO_DB_URL
 
+
+client = AsyncIOMotorClient(MONGO_DB_URL)
 logger = logging.getLogger(__name__)
 load_dotenv(override=True)
 
@@ -86,3 +90,7 @@ def getAudioContent(initial_message, ouput_format="bytes"):
             return audio_bytes
         audio_content = audio_bytes.decode('utf-8')
         return audio_content
+    
+def getDb():
+    db = client.ai_call_agent
+    return db

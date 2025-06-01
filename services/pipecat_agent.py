@@ -42,6 +42,7 @@ from pipecat.frames.frames import (
     UserStoppedSpeakingFrame
 )
 from pipecat.services.groq.stt import GroqSTTService
+from utils import get_db
 
 logger = logging.getLogger(__name__)
 
@@ -83,7 +84,15 @@ class CustomObserver(BaseObserver):
 
 
 
-async def run_pipecat_agent(websocket_client, stream_sid, call_sid):
+async def run_pipecat_agent(websocket_client, stream_sid, call_sid, session_id):
+    db = get_db()
+
+    ## gettimg prompt and language from database
+    call_config = await db.calls.find_one({"session_id": session_id})
+    prompt = call_config.get("prompt", initial_message)
+    language = call_config.get("language", Language.HI)
+
+
     serializer = TwilioFrameSerializer(
         stream_sid=stream_sid,
         call_sid=call_sid,
@@ -117,7 +126,7 @@ async def run_pipecat_agent(websocket_client, stream_sid, call_sid):
     #    metrics = SentryMetrics(),
     #)
 
-    stt = GroqSTTService(api_key=GROQ_API_KEY, model="whisper-large-v3-turbo", language=Language.HI,prompt="",temperature=0.2)
+    stt = GroqSTTService(api_key=GROQ_API_KEY, model="whisper-large-v3-turbo", language=language,prompt="",temperature=0.2)
 
     llm = GroqLLMService(api_key=GROQ_API_KEY, model=LLM_MODEL)
 
@@ -126,7 +135,7 @@ async def run_pipecat_agent(websocket_client, stream_sid, call_sid):
         voice_id="ebAeFZ5UfJ59yFTYEtJ8",
         sample_rate=8000,
         params=ElevenLabsTTSService.InputParams(
-            language=Language.HI,
+            language=language,
         ),
         metrics  = SentryMetrics(),
     )
@@ -136,7 +145,7 @@ async def run_pipecat_agent(websocket_client, stream_sid, call_sid):
     messages = [
         {
             "role": "system",
-            "content": PROMPT
+            "content": prompt
         },
     ]
 
