@@ -17,7 +17,7 @@ import json
 from services.pipecat_agent import run_pipecat_agent
 from utils import getAudioContent
 from services.config import initial_message
-from utils import get_db
+from utils import getDb
 
 
 load_dotenv(override=True)
@@ -83,7 +83,7 @@ async def handle_call():
 
 @app.post("/start_call")
 async def start_call(request: Dict[str, str]):
-    db = get_db()
+    db = getDb()
     to_number = request.get("to_number")
     prompt = request.get("prompt", initial_message)
     language = request.get("language", "en")

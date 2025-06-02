@@ -42,7 +42,7 @@ from pipecat.frames.frames import (
     UserStoppedSpeakingFrame
 )
 from pipecat.services.groq.stt import GroqSTTService
-from utils import get_db
+from utils import getDb
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +85,7 @@ class CustomObserver(BaseObserver):
 
 
 async def run_pipecat_agent(websocket_client, stream_sid, call_sid, session_id):
-    db = get_db()
+    db = getDb()
 
     ## gettimg prompt and language from database
     call_config = await db.calls.find_one({"session_id": session_id})
