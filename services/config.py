@@ -82,6 +82,9 @@ Price: हमारे कोर्स 50,000 रुपये से शुर�
 ## LLM Configuration
 LLM_MODEL = "llama-3.3-70b-versatile"
 
+## TTS Configuration
+TTS_VOICE_ID = "ebAeFZ5UfJ59yFTYEtJ8"  # Default voice for TTS
+
 # Validate required environment variables
 required_vars = [
     'DEEPGRAM_API_KEY',

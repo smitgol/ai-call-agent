@@ -3,15 +3,8 @@ from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.runner import PipelineRunner
 from pipecat.pipeline.task import PipelineParams, PipelineTask
 from pipecat.services.groq.llm import GroqLLMService
-from pipecat.processors.audio.audio_buffer_processor import AudioBufferProcessor
 from pipecat.serializers.twilio import TwilioFrameSerializer
 from pipecat.services.elevenlabs.tts import ElevenLabsTTSService
-from pipecat.services.gladia.stt  import GladiaSTTService
-from pipecat.services.gladia.config import (
-    GladiaInputParams,
-    LanguageConfig,
-    RealtimeProcessingConfig
-)
 from pipecat.services.openai.llm import OpenAILLMService
 from pipecat.transports.network.fastapi_websocket import (
     FastAPIWebsocketParams,
@@ -19,14 +12,13 @@ from pipecat.transports.network.fastapi_websocket import (
 )
 from pipecat.transcriptions.language import Language
 from pipecat.processors.aggregators.openai_llm_context import OpenAILLMContext
-from services.config import ( ELEVENLABS_API_KEY, GROQ_API_KEY, PROMPT, initial_message, LLM_MODEL, TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, GLADIA_API_KEY, SENTRY_SDK_URL )
+from services.config import ( ELEVENLABS_API_KEY, GROQ_API_KEY, initial_message, LLM_MODEL, TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, SENTRY_SDK_URL, TTS_VOICE_ID, PROMPT )
 from services.llm import tool_list
 import sentry_sdk
 from pipecat.observers.base_observer import BaseObserver
 from services.call_transcription import TranscriptionLogger
 from pipecat.processors.metrics.sentry import SentryMetrics
 from utils import get_twilio_client
-from pipecat.observers.loggers.debug_log_observer import DebugLogObserver
 from pipecat.processors.transcript_processor import TranscriptProcessor
 import logging
 from pipecat.services.stt_service import STTService
@@ -42,6 +34,10 @@ from pipecat.frames.frames import (
     UserStoppedSpeakingFrame
 )
 from pipecat.services.groq.stt import GroqSTTService
+#from pipecat.audio.filters.noisereduce_filter import NoisereduceFilter
+#from pipecat.audio.turn.smart_turn.local_smart_turn import LocalSmartTurnAnalyzer
+#from pipecat.audio.turn.smart_turn.base_smart_turn import SmartTurnParams
+#from pipecat.audio.vad.vad_analyzer import VADParams
 from utils import getDb
 
 logger = logging.getLogger(__name__)
@@ -88,9 +84,10 @@ async def run_pipecat_agent(websocket_client, stream_sid, call_sid, session_id):
     db = getDb()
 
     ## gettimg prompt and language from database
-    call_config = await db.calls.find_one({"session_id": session_id})
-    prompt = call_config.get("prompt", initial_message)
+    call_config = await db.call_configs.find_one({"session_id": session_id})
+    prompt = call_config.get("prompt", PROMPT)
     language = call_config.get("language", Language.HI)
+    voice_id = call_config.get("voice_id", TTS_VOICE_ID)
 
 
     serializer = TwilioFrameSerializer(
@@ -110,29 +107,23 @@ async def run_pipecat_agent(websocket_client, stream_sid, call_sid, session_id):
             vad_analyzer=SileroVADAnalyzer(),
             serializer=serializer,
             transcription_enabled=True,
+            #turn_analyzer=LocalSmartTurnAnalyzer(
+            #params=SmartTurnParams(
+            #    stop_secs=1.0,
+            #    pre_speech_ms=0.0,
+            #    max_duration_secs=8.0
+            #),
+            #smart_turn_model_path = "pipecat-ai/smart-turn"
+        #),        
         ),
     )
-
-    # Initialize AI services
-    #stt = GladiaSTTService(api_key=GLADIA_API_KEY,
-    #    model="solaria-1",
-    #    params=GladiaInputParams(
-    #        language_config=LanguageConfig(
-    #            languages=[Language.HI],
-    #            code_switching=True,
-    #            endpointing=0.03
-    #        ),
-    #    ),
-    #    metrics = SentryMetrics(),
-    #)
-
-    stt = GroqSTTService(api_key=GROQ_API_KEY, model="whisper-large-v3-turbo", language=language,prompt="",temperature=0.2)
+    stt = GroqSTTService(api_key=GROQ_API_KEY, model="whisper-large-v3", language=language,prompt="")
 
     llm = GroqLLMService(api_key=GROQ_API_KEY, model=LLM_MODEL)
 
     tts = ElevenLabsTTSService(
         api_key=ELEVENLABS_API_KEY,
-        voice_id="ebAeFZ5UfJ59yFTYEtJ8",
+        voice_id=voice_id,
         sample_rate=8000,
         params=ElevenLabsTTSService.InputParams(
             language=language,
@@ -197,7 +188,7 @@ async def run_pipecat_agent(websocket_client, stream_sid, call_sid, session_id):
     @transport.event_handler("on_client_disconnected")
     async def on_client_disconnected(transport, client):
         await task.cancel()
-        await transcript_logger.save_to_file()
+        await transcript_logger.save_to_mongodb()
 
     @transcript.event_handler("on_transcript_update")
     async def on_transcript_update(processor, frame):

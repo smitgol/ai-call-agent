@@ -3,13 +3,14 @@ from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 import asyncio
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from fastapi.middleware.cors import CORSMiddleware
 from services.twilio import twilio_handler  # assuming twilio_handler is async
 from services.voice_assistant import voice_assistant_handler
 import os
 from twilio.twiml.voice_response import Connect, VoiceResponse
 from fastapi.responses import HTMLResponse
 from typing import Dict
-from services.config import initial_message
+from services.config import initial_message, TTS_VOICE_ID
 from utils import get_twilio_client, check_and_set_initial_message
 from dotenv import load_dotenv
 from logger_config import logger 
@@ -23,6 +24,15 @@ from utils import getDb
 load_dotenv(override=True)
 
 app = FastAPI()
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allows all origins
+    allow_credentials=True,
+    allow_methods=["*"],  # Allows all methods
+    allow_headers=["*"],  # Allows all headers
+)
 
 @app.websocket("/ws/handle_call")
 async def websocket_endpoint(websocket: WebSocket):
@@ -56,7 +66,7 @@ async def pipecat_websocket_endpoint(websocket: WebSocket, session_id: str):
                 "payload": audio
             }
         }
-        await websocket.send_json(payload)
+        #await websocket.send_json(payload)
         # Run your Pipecat bot
         await run_pipecat_agent(websocket, stream_sid, call_sid, session_id)
     except WebSocketDisconnect:
@@ -87,6 +97,7 @@ async def start_call(request: Dict[str, str]):
     to_number = request.get("to_number")
     prompt = request.get("prompt", initial_message)
     language = request.get("language", "en")
+    voice_id = request.get("voice_id", TTS_VOICE_ID)
     session_id = str(uuid4())
     service_url = f"https://{os.environ['SERVER']}/handle-call"
     print("Service URL: ", service_url)
@@ -100,6 +111,7 @@ async def start_call(request: Dict[str, str]):
             "to_number": to_number,
             "prompt": prompt,
             "language": language,
+            "voice_id": voice_id
         })
         twilio_client = get_twilio_client()
         call = twilio_client.calls.create(
