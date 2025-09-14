@@ -1,12 +1,14 @@
 import os
 from twilio.rest import Client
-from services.tts import TTSService
+from services.tts.tts import TTSService
 import base64
 import time
 from dotenv import load_dotenv
 import logging
 from motor.motor_asyncio import AsyncIOMotorClient
 from services.config import MONGO_DB_URL
+import requests
+
 
 
 client = AsyncIOMotorClient(MONGO_DB_URL)
@@ -76,19 +78,31 @@ async def check_and_set_initial_message(initial_message):
     # Save content
     with open(file_path, "wb") as f:
         f.write(content)
+
+
+def call_exotel_api(to_number, session_id):
+    url = f"https://api.exotel.com/v1/Accounts/{os.environ.get('EXOTEL_ACCOUNT_SID')}/Calls/connect"
+
+    payload = {
+        'From': to_number,
+        'CallerId': os.environ["EXOTEL_FROM_NUMBER"],
+        'Url': f'http://my.exotel.com/{os.environ.get("EXOTEL_ACCOUNT_SID")}/exoml/start_voice/' + os.environ.get("EXOTEL_APP_ID"),
+        'CustomField': 'session_id=' + session_id,
+    }
+
+    response = requests.request("POST", url, auth=(os.environ.get("EXOTEL_AUTH_KEY"), os.environ.get("EXOTEL_AUTH_TOKEN")), data=payload)
+    print("Exotel API response:", response.text)
+    return response.status_code
     
-def getAudioContent(initial_message, ouput_format="bytes"):
+def getAudioContent(initial_message, type="string"):
     # Convert initial message to base64 for safe filename first
-    audio_content_start_time = time.time()
     safe_filename = base64.b64encode(initial_message.encode()).decode()
     file_path = f"saved_initial_message/{safe_filename}.txt"
     with open(file_path, "rb") as f:
         audio_bytes = f.read()
-        if ouput_format == "bytes":
-            print("Audio content read in seconds:", time.time() - audio_content_start_time)
-            # Return the audio content as bytes
-            return audio_bytes
         audio_content = audio_bytes.decode('utf-8')
+        if type == "bytes":
+            return audio_bytes
         return audio_content
     
 def getDb():

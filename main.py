@@ -1,26 +1,24 @@
 from uuid import uuid4
-from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 import asyncio
-from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
-from services.twilio import twilio_handler  # assuming twilio_handler is async
-from services.voice_assistant import voice_assistant_handler
+from services.core.twilio.twilio import twilio_handler  # assuming twilio_handler is async
+#from services.core.websocket.voice_assistant import voice_assistant_handler
 import os
 from twilio.twiml.voice_response import Connect, VoiceResponse
 from fastapi.responses import HTMLResponse
 from typing import Dict
-from services.config import initial_message, TTS_VOICE_ID
-from utils import get_twilio_client, check_and_set_initial_message
+from services.config import initial_message, TTS_VOICE_ID, PROMPT
+from utils import get_twilio_client, check_and_set_initial_message, getAudioContent, call_exotel_api
 from dotenv import load_dotenv
 from logger_config import logger 
 import json
-from services.pipecat_agent import run_pipecat_agent
-from utils import getAudioContent
+from services.core.pipecat_agent.twilio_bot import run_twilio_bot
+from services.core.pipecat_agent.exotel_bot import run_exotel_agent
 from services.config import initial_message
 from utils import getDb
-
-
+from services.core.pipecat_agent.websocket_bot import run_voice_assistant_bot
+from services.core.pipecat_agent.rag_bot import rag_bot
 load_dotenv(override=True)
 
 app = FastAPI()
@@ -58,26 +56,37 @@ async def pipecat_websocket_endpoint(websocket: WebSocket, session_id: str):
         call_sid = call_data["start"]["callSid"]
         get_twilio_client().calls(call_sid).recordings.create({"recordingChannels": "dual"})
 
-        audio = getAudioContent(initial_message, 'string')
-        payload = {
-            "streamSid": stream_sid,
-            "event": "media",
-            "media": {
-                "payload": audio
-            }
-        }
-        #await websocket.send_json(payload)
         # Run your Pipecat bot
-        await run_pipecat_agent(websocket, stream_sid, call_sid, session_id)
+        await run_twilio_bot(websocket, stream_sid, call_sid, session_id)
     except WebSocketDisconnect:
         print("Client disconnected")
 
 
-@app.websocket("/ws/voice-assistant")
-async def voice_assistant_endpoint(websocket: WebSocket):
+@app.websocket("/ws/voice-assistant/{session_id}")
+async def voice_assistant_endpoint(websocket: WebSocket, session_id: str):
     await websocket.accept()
     try:
-        await voice_assistant_handler(websocket)
+        print("session_id: ", session_id)
+        await run_voice_assistant_bot(websocket, session_id)
+    except WebSocketDisconnect:
+        print("Client disconnected")
+
+@app.websocket("/ws/telecmi")
+async def telecmi_websocket_endpoint(websocket: WebSocket):
+    await websocket.accept()
+    try:
+        start_data = websocket.iter_text()
+        await start_data.__anext__()
+
+        # Second message contains the call details
+        call_data = json.loads(await start_data.__anext__())
+        print("Call data received: ", call_data)
+        # Extract both StreamSid and CallSid
+        stream_sid = call_data["start"]["stream_sid"]
+        call_sid = call_data["start"]["call_sid"]
+        session_id = call_data["start"]["custom_parameters"]["session_id"]
+        
+        await run_exotel_agent(websocket, stream_sid, call_sid, session_id=session_id)
     except WebSocketDisconnect:
         print("Client disconnected")
 
@@ -95,12 +104,12 @@ async def handle_call():
 async def start_call(request: Dict[str, str]):
     db = getDb()
     to_number = request.get("to_number")
-    prompt = request.get("prompt", initial_message)
+    prompt = request.get("prompt", PROMPT)
     language = request.get("language", "en")
     voice_id = request.get("voice_id", TTS_VOICE_ID)
+    initial_message_var = request.get("initial_message", initial_message)
     session_id = str(uuid4())
     service_url = f"https://{os.environ['SERVER']}/handle-call"
-    print("Service URL: ", service_url)
     await check_and_set_initial_message(initial_message)
     ws_url = f"wss://{os.environ['SERVER']}/ws/pipecat/{session_id}"
 
@@ -111,7 +120,8 @@ async def start_call(request: Dict[str, str]):
             "to_number": to_number,
             "prompt": prompt,
             "language": language,
-            "voice_id": voice_id
+            "voice_id": voice_id,
+            "initial_message": initial_message_var
         })
         twilio_client = get_twilio_client()
         call = twilio_client.calls.create(
@@ -126,6 +136,71 @@ async def start_call(request: Dict[str, str]):
         print("Error in start_call")
         print(e)
         logger.error(f"Error in start_call: {e}")
+        return {"status": "failed", "message": e}
+
+@app.post("/start_call_exotel")
+async def start_call_exotel(request: Dict[str, str]):
+    try:
+        db = getDb()
+        to_number = request.get("to_number")
+        prompt = request.get("prompt", PROMPT)
+        language = request.get("language", "en")
+        voice_id = request.get("voice_id", TTS_VOICE_ID)
+        initial_message_var = request.get("initial_message", initial_message)
+        session_id = str(uuid4())
+        await db.call_configs.insert_one({
+            "session_id":session_id,
+            "to_number": to_number,
+            "prompt": prompt,
+            "language": language,
+            "voice_id": voice_id,
+            "initial_message": initial_message_var
+        })
+        response = call_exotel_api(to_number, session_id)
+        if response != 200:
+            return {"status": "failed", "message": "Failed to initiate call with Exotel"}
+            raise Exception(f"Failed to initiate call: {response}")
+        return {"status": "success", "message": "Call initiated", "data": response}
+    except Exception as e:
+        print("Error in start_call_exotel")
+        print(e)
+        logger.error(f"Error in start_call_exotel: {e}")
+        return {"status": "failed", "message": e}
+
+
+@app.post("/create_voice_assistant_session")
+async def create_voice_assistant_session(request: Dict[str, str]):
+    try:
+        db = getDb()
+        prompt = request.get("prompt", PROMPT)
+        language = request.get("language", "en")
+        voice_id = request.get("voice_id", TTS_VOICE_ID)
+        initial_message_var = request.get("initial_message", initial_message)
+        session_id = str(uuid4())
+        await db.call_configs.insert_one({
+            "session_id":session_id,
+            "prompt": prompt,
+            "language": language,
+            "voice_id": voice_id,
+            "initial_message": initial_message_var
+        })
+        return {"ws_url":f"wss://{os.environ['SERVER']}/ws/voice-assistant/{session_id}"}
+    except Exception as e:
+        print("Error in create_voice_assistant_session")
+        print(e)
+        logger.error(f"Error in create_voice_assistant_session: {e}")
+        return {"status": "failed", "message": e}
+
+@app.websocket("/rag_bot")
+async def rag_bot_api(websocket: WebSocket):
+    try:
+        session_id = str(uuid4())
+        await rag_bot(websocket, session_id)
+        return {"status": "success", "message": "Call initiated"}
+    except Exception as e:
+        print("Error in rag_bot")
+        print(e)
+        logger.error(f"Error in rag_bot: {e}")
         return {"status": "failed", "message": e}
 
 @app.get("/")

@@ -3,10 +3,10 @@ import json
 import base64
 import time
 from collections import deque
-from services.stream import StreamService
-from services.stt import deepgram_connect, openai_stt_connect, openai_ws_config
-from services.tts import TTSService 
-from services.llm import LLMService
+from services.core.twilio.stream import StreamService
+from services.stt.stt import deepgram_connect, openai_stt_connect, openai_ws_config, get_ws_gadia, connect_to_gadia
+from services.tts.tts import TTSService 
+from services.llm.llm import LLMService
 from fastapi import WebSocketDisconnect
 from utils import text_chunker, getAudioContent, get_twilio_client
 import websockets
@@ -14,7 +14,7 @@ from services.config import initial_message, repeat_message
 import audioop
 import logging
 import uuid
-from .call_transcription import TranscriptionLogger
+from ...call_transcription import TranscriptionLogger
 
 
 
@@ -38,6 +38,7 @@ async def twilio_handler(client_ws):
     #stt_service = await openai_stt_connect()
     stt_service = None
     stt_receiver_task = None
+    groq_stt_handler = None
     #await stt_service.send(json.dumps(openai_ws_config()))
 
     #llm_service = LLMService()
@@ -54,58 +55,7 @@ async def twilio_handler(client_ws):
     #var for log
     transcription_logger = None
     try:
-        ## Region STT 
-        async def stt_sender(deepgram_ws):
-             while True:
-                 chunk = await outbox.get()
-                 await deepgram_ws.send(chunk)
-
-        async def stt_receiver(deepgram_ws):
-            print('started deepgram receiver')
-            nonlocal audio_cursor, stt_start_time, stt_processing_time
-            async for message in deepgram_ws:
-                try:
-                    dg_json = json.loads(message)
-                    # print the results from openai!
-                    
-                    if dg_json['type'] == "conversation.item.input_audio_transcription.completed":
-                        transcription = dg_json['transcript']
-                        if transcription.strip():
-                            if transcription_logger:
-                                print("stt time: ", time.time() - stt_start_time)
-                                print("stt processing time: ", time.time() - stt_processing_time)
-                                print("user timing for stt: ",  stt_start_time - stt_processing_time)
-                                transcription_logger.add_entry("STT", transcription)
-                            await llm_service.complete_with_chunks(transcription)
-                    elif dg_json['type'] == "input_audio_buffer.speech_started":
-                        stt_start_time = time.time()
-                        print('speech started')
-                        logger.info("speech started")
-                        await stop_speaking()
-                    elif dg_json['type'] == "input_audio_buffer.speech_ended":
-                        print('speech ended')
-                        logger.info("speech ended")
-                        stt_processing_time = time.time()
-                    '''
-                    if dg_json["is_final"] == True:
-                         transcript = dg_json["channel"]["alternatives"][0]["transcript"]
-                         if transcript.strip():
-                             if transcription_logger:
-                                 transcription_logger.add_entry("STT", transcript)
-                                 #logger.info("stt transcript: ", transcript)
-                             print('final transcript: ' + transcript)
-                             print("stt time: ", time.time() - stt_start_time)
-                             await llm_service.complete_with_chunks(transcript)
-                    elif dg_json["type"] == "SpeechStarted":
-                        stt_start_time = time.time()
-                        print('speech started')
-                        #await stop_speaking()
-                    '''
-                except:
-                    print('was not able to parse deepgram response as json')
-                    continue
-            print('finished deepgram receiver')
-
+        
         async def handle_audio_sent(mark_label):
             marks.append(mark_label)
 
@@ -192,16 +142,17 @@ async def twilio_handler(client_ws):
                 nonlocal tts_task, llm_start_time, tts_start_time
                 if tts_task:
                     tts_task.cancel()
-
+                if transcription_logger: transcription_logger.add_entry("LLM", "FIRST CHUNK RECEIVED")
                 await tts_service.disconnect()
                 await tts_service.connect_tts()
                 tts_task = asyncio.create_task(send_audio_chunks_to_twilio(tts_listener()))
                 complete_sentence = ""
-                logger.info("FIRST CHUNK RECEIVED")
+                if transcription_logger: transcription_logger.add_entry("LLM", "LLM Info: For loop Started")
                 async for text in text_chunker(text_iterator, llm_service):
                     complete_sentence += text
                     if text:  # Skip empty strings
                         try:
+                            if transcription_logger: transcription_logger.add_entry("LLM", "LLM chunk: " + text)
                             await tts_service.tts_ws.send(json.dumps({"text": text}))
                             logger.info(f"Sent text to TTS: {text}")
                         except Exception as e:
@@ -214,8 +165,7 @@ async def twilio_handler(client_ws):
                     await tts_service.end_tts_streaming(tts_service.tts_ws)
                 await tts_task
 
-                if transcription_logger:
-                    transcription_logger.add_entry("LLM", complete_sentence)
+                if transcription_logger: transcription_logger.add_entry("LLM", "Complete LLM response: " + complete_sentence)
                 total_llm_time = time.time() - llm_start_time
                 logger.info(f"LLM COMPLETED, LLM processing time: {total_llm_time:.2f} seconds")
                 tts_start_time = time.time()
@@ -224,9 +174,11 @@ async def twilio_handler(client_ws):
 
         async def send_audio_chunks_to_twilio(tts_listener):
             nonlocal tts_start_time
+            if transcription_logger: transcription_logger.add_entry("TTS", "TTS Info: Data sending started")
             async for audio_chunk in tts_listener:
                 stream_service.set_send_audio(True)
                 await send_audio_to_twilio(audio_chunk)
+            if transcription_logger: transcription_logger.add_entry("TTS", "TTS Info: Data sending ended")
             # If this is the final message and we're ending the call, send a mark
             if end_call_after_this_mark:
                 mark_label = end_call_after_this_mark
@@ -269,7 +221,7 @@ async def twilio_handler(client_ws):
             call_sid = stream_service.get_callsid()
             if call_sid:
                 if transcription_logger:
-                            await transcription_logger.save_to_file()
+                            await transcription_logger.save_to_mongodb()
                 get_twilio_client().calls(call_sid).update(status="completed")
                 logger.info("Call ended by tool call")
                 # Close connections
@@ -310,8 +262,8 @@ async def twilio_handler(client_ws):
                         get_twilio_client().calls(call_sid).recordings.create({"recordingChannels": "dual"})
                         transcription_logger = TranscriptionLogger(call_sid)
                         # Set connection ID in context
-                        audio_content = getAudioContent(initial_message)
-                        await stream_service.sent_audio(audio_content)
+                        #audio_content = getAudioContent(initial_message)
+                        #await stream_service.sent_audio(audio_content)
                     elif event_type == "media":
                         media = message['media']
                         chunk = base64.b64decode(media['payload'])                 
@@ -327,39 +279,34 @@ async def twilio_handler(client_ws):
                     elif event_type == "stop":
                         logger.info("Twilio connection stopped")
                         if transcription_logger:
-                            await transcription_logger.save_to_file()
+                            await transcription_logger.save_to_mongodb()
                         await client_ws.close()
                         #stt_service.close()
                         await tts_service.disconnect()
                         break
                     if len(buffer) >= BUFFER_SIZE or empty_byte_received:
-                        outbox.put_nowait(buffer)
-                        audio_append = {
-                            "type": "input_audio_buffer.append",
-                            "audio": base64.b64encode(buffer).decode()
-                        }
-                        if stt_service:
-                            await stt_service.send(json.dumps(audio_append))
+                        outbox.put_nowait(buffer) 
+                        await groq_stt_handler.process_audio_chunk(buffer)  
                         buffer = bytearray(b'')
                 except Exception as e:
                     logger.error(f"Client Receiver Error: {e}")
                     
         async def connect_to_services():
-            nonlocal stt_service, llm_service, tts_service, stt_receiver_task
-            stt_service = await openai_stt_connect()
-            await stt_service.send(json.dumps(openai_ws_config()))
+            nonlocal stt_service, llm_service, tts_service, stt_receiver_task, groq_stt_handler
+            
+            # Initialize Groq STT handler with Silero VAD
+            groq_stt_handler = create_groq_stt_handler()
+            
+            # Initialize LLM and TTS services
             llm_service = LLMService()
             tts_service = TTSService("twilio")
             await tts_service.connect_tts()
-            stt_receiver_task = asyncio.create_task(stt_receiver(stt_service))
-            #deepgram_sender_task = asyncio.create_task(stt_sender(stt_service))
-            #stt_service.on("transcription", handle_llm)
-            #stt_service.on('utterance', handle_utterance)
-            #llm_service.on("llm_response", handle_tts) #only use when we using llm by api
+            
+            
+            # Connect event handlers
             llm_service.on("llm_stream", send_chunks_to_tts)
             llm_service.on("tool_triggered", handle_tool_call)
-            #llm_service.on("llm_cache_stream", handle_llm_cache_stream)
-            tts_service.on("audio", send_audio_to_twilio) #only when we using tts by api
+            tts_service.on("audio", send_audio_to_twilio)
             stream_service.on('audiosent', handle_audio_sent)
 
 

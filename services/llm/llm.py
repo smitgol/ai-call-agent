@@ -53,8 +53,9 @@ class LLMService(EventEmitter):
                 content = delta.content or ""
                 complete_response += content
             await self.emit('llm_response', complete_response)
-
+            print("complete_response", complete_response)
             self.user_context.append({"role": "assistant", "content": complete_response})
+            return complete_response
         except Exception as e:
             print("Error generating LLM response:", str(e))
             return None

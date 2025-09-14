@@ -3,8 +3,8 @@ from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.runner import PipelineRunner
 from pipecat.pipeline.task import PipelineParams, PipelineTask
 from pipecat.services.groq.llm import GroqLLMService
-from pipecat.serializers.twilio import TwilioFrameSerializer
-from pipecat.services.elevenlabs.tts import ElevenLabsTTSService
+from pipecat.serializers.exotel import ExotelFrameSerializer
+from pipecat.services.elevenlabs.tts import ElevenLabsTTSService, ElevenLabsHttpTTSService
 from pipecat.services.openai.llm import OpenAILLMService
 from pipecat.transports.network.fastapi_websocket import (
     FastAPIWebsocketParams,
@@ -12,17 +12,17 @@ from pipecat.transports.network.fastapi_websocket import (
 )
 from pipecat.transcriptions.language import Language
 from pipecat.processors.aggregators.openai_llm_context import OpenAILLMContext
-from services.config import ( ELEVENLABS_API_KEY, GROQ_API_KEY, initial_message, LLM_MODEL, TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, SENTRY_SDK_URL, TTS_VOICE_ID, PROMPT )
-from services.llm import tool_list
+from services.config import ( ELEVENLABS_API_KEY, GROQ_API_KEY, initial_message, LLM_MODEL, TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, SENTRY_SDK_URL, TTS_VOICE_ID, PROMPT, KOALA_ACCESS_KEY )
+from services.llm.llm import tool_list
 import sentry_sdk
 from pipecat.observers.base_observer import BaseObserver
 from services.call_transcription import TranscriptionLogger
 from pipecat.processors.metrics.sentry import SentryMetrics
-from utils import get_twilio_client
 from pipecat.processors.transcript_processor import TranscriptProcessor
 import logging
 from pipecat.services.stt_service import STTService
 from pipecat.frames.frames import (
+    TTSSpeakFrame,
     TranscriptionFrame,
     EndFrame,
     LLMFullResponseEndFrame,
@@ -34,11 +34,14 @@ from pipecat.frames.frames import (
     UserStoppedSpeakingFrame
 )
 from pipecat.services.groq.stt import GroqSTTService
+from pipecat.services.cartesia.tts import CartesiaHttpTTSService
+from pipecat.audio.filters.koala_filter import KoalaFilter
 #from pipecat.audio.filters.noisereduce_filter import NoisereduceFilter
 #from pipecat.audio.turn.smart_turn.local_smart_turn import LocalSmartTurnAnalyzer
 #from pipecat.audio.turn.smart_turn.base_smart_turn import SmartTurnParams
 #from pipecat.audio.vad.vad_analyzer import VADParams
 from utils import getDb
+import aiohttp
 
 logger = logging.getLogger(__name__)
 
@@ -80,23 +83,31 @@ class CustomObserver(BaseObserver):
 
 
 
-async def run_pipecat_agent(websocket_client, stream_sid, call_sid, session_id):
+async def run_exotel_agent(websocket_client, stream_sid, call_sid, session_id):
     db = getDb()
 
     ## gettimg prompt and language from database
     call_config = await db.call_configs.find_one({"session_id": session_id})
-    prompt = call_config.get("prompt", PROMPT)
-    language = call_config.get("language", Language.HI)
-    voice_id = call_config.get("voice_id", TTS_VOICE_ID)
+    prompt = PROMPT
+    language = Language.EN
+    voice_id = TTS_VOICE_ID
+    initial_message_var = "Hello, how can I help you today?"
+
+    #audio = getAudioContent(initial_message_var)
+    #payload = {
+    #    "streamSid": stream_sid,
+    #    "event": "media",
+    #    "media": {
+    #        "payload": audio
+    #    }
+    #}
+    #await websocket_client.send_json(payload)
 
 
-    serializer = TwilioFrameSerializer(
+    serializer = ExotelFrameSerializer(
         stream_sid=stream_sid,
         call_sid=call_sid,
-        account_sid=TWILIO_ACCOUNT_SID,
-        auth_token=TWILIO_AUTH_TOKEN,
     )
-
     # Create the WebSocket transport
     transport = FastAPIWebsocketTransport(
         websocket=websocket_client,
@@ -107,6 +118,7 @@ async def run_pipecat_agent(websocket_client, stream_sid, call_sid, session_id):
             vad_analyzer=SileroVADAnalyzer(),
             serializer=serializer,
             transcription_enabled=True,
+            audio_in_filter=KoalaFilter(access_key=KOALA_ACCESS_KEY)
             #turn_analyzer=LocalSmartTurnAnalyzer(
             #params=SmartTurnParams(
             #    stop_secs=1.0,
@@ -117,7 +129,7 @@ async def run_pipecat_agent(websocket_client, stream_sid, call_sid, session_id):
         #),        
         ),
     )
-    stt = GroqSTTService(api_key=GROQ_API_KEY, model="whisper-large-v3", language=language,prompt="")
+    stt = GroqSTTService(api_key=GROQ_API_KEY, model="whisper-large-v3-turbo", language=language,prompt="")
 
     llm = GroqLLMService(api_key=GROQ_API_KEY, model=LLM_MODEL)
 
@@ -138,11 +150,15 @@ async def run_pipecat_agent(websocket_client, stream_sid, call_sid, session_id):
             "role": "system",
             "content": prompt
         },
+        {
+            "role": "assistant",
+            "content": initial_message_var
+        }
     ]
 
 
     # Setup the context aggregator
-    context = OpenAILLMContext(messages=messages, tools=tool_list)
+    context = OpenAILLMContext(messages=messages)
     context_aggregator = llm.create_context_aggregator(context)
     transcript = TranscriptProcessor()
     transcript_logger = TranscriptionLogger(call_sid)
@@ -170,7 +186,6 @@ async def run_pipecat_agent(websocket_client, stream_sid, call_sid, session_id):
             allow_interruptions=True,
             enable_metrics=True,
             enable_usage_metrics=True,
-            observers=[CustomObserver()],
         ),
     )
 
@@ -183,7 +198,7 @@ async def run_pipecat_agent(websocket_client, stream_sid, call_sid, session_id):
     @transport.event_handler("on_client_connected")
     async def on_client_connected(transport, client):
         # Kickstart the conversation
-        pass
+        await task.queue_frame(TTSSpeakFrame(text=initial_message_var))
 
     @transport.event_handler("on_client_disconnected")
     async def on_client_disconnected(transport, client):
