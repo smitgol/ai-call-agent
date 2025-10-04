@@ -66,7 +66,7 @@ The project is built using a modular architecture with the following key compone
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/smitgol/ai-call-agent
+git clone https://github.com/smitgol/ai-call-agent.git
 cd ai-call-agent-deepgram
 ```
 
