@@ -98,7 +98,7 @@ Dont flow the confloversation flow striclty act as human and not as AI.And Talk 
 LLM_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"
 
 ## TTS Configuration
-TTS_VOICE_ID = "c6SfcYrb2t09NHXiT80T"  # Default voice for TTS
+TTS_VOICE_ID = "a4a16c5e-5902-4732-b9b6-2a48efd2e11b"  # Default voice for TTS
 
 # Validate required environment variables
 required_vars = [

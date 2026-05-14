@@ -16,10 +16,12 @@ from pipecat.services.elevenlabs.tts import ElevenLabsTTSService
 from pipecat.frames.frames import (
     TTSSpeakFrame
 )
+from pipecat.services.cartesia.tts import CartesiaTTSService
+
 import logging
 from utils import getDb
 import os
-from services.config import TTS_VOICE_ID, PROMPT, initial_message, GEMMINI_API_KEY, GROQ_API_KEY, LLM_MODEL, ELEVENLABS_API_KEY
+from services.config import TTS_VOICE_ID, PROMPT, initial_message, GEMMINI_API_KEY, GROQ_API_KEY, LLM_MODEL, ELEVENLABS_API_KEY,CARTESIA_API_KEY
 logger = logging.getLogger(__name__)
 
 
@@ -61,13 +63,22 @@ async def run_voice_assistant_bot(websocket_client, session_id):
     context = OpenAILLMContext(messages=messages)
     context_aggregator = llm.create_context_aggregator(context)
 
-    tts = ElevenLabsTTSService(
-        api_key=ELEVENLABS_API_KEY,
-        voice_id=voice_id,
-        sample_rate=8000,
-        params=ElevenLabsTTSService.InputParams(
-            language=language,
-        ),
+    #tts = ElevenLabsTTSService(
+    #    api_key=ELEVENLABS_API_KEY,
+    #    voice_id=voice_id,
+    #    sample_rate=8000,
+    #    params=ElevenLabsTTSService.InputParams(
+    #        language=language,
+    #    ),
+    #)
+    tts = CartesiaTTSService(
+        api_key=CARTESIA_API_KEY, 
+        voice_id=TTS_VOICE_ID,  
+        model="sonic-3",
+        params=CartesiaTTSService.InputParams(
+            language="hi",
+            speed="normal"
+        )
     )
 
 

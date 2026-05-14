@@ -184,7 +184,10 @@ async def create_voice_assistant_session(request: Dict[str, str]):
             "voice_id": voice_id,
             "initial_message": initial_message_var
         })
-        return {"ws_url":f"wss://{os.environ['SERVER']}/ws/voice-assistant/{session_id}"}
+        if os.environ['SERVER'] == "localhost":
+            return {"ws_url":f"ws://{os.environ['SERVER']}/ws/voice-assistant/{session_id}"}
+        else:
+            return {"ws_url":f"wss://{os.environ['SERVER']}/ws/voice-assistant/{session_id}"}
     except Exception as e:
         print("Error in create_voice_assistant_session")
         print(e)
