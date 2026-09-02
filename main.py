@@ -210,6 +210,11 @@ async def rag_bot_api(websocket: WebSocket):
 async def read_root():
     return {"Status": "Working"}
 
+
+@app.get("/health")
+async def health_check():
+    return {"Status": "Working"}
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=5000, reload=True, lifespan="on")
