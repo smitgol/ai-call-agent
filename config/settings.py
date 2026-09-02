@@ -62,7 +62,7 @@ class Settings(BaseSettings):
     koala_access_key: str = Field(..., env="KOALA_ACCESS_KEY")
     
     # AI Configuration
-    llm_model: str = Field("meta-llama/llama-4-scout-17b-16e-instruct", env="LLM_MODEL")
+    llm_model: str = Field("qwen/qwen3.8-27b", env="LLM_MODEL")
     tts_voice_id: str = Field("c6SfcYrb2t09NHXiT80T", env="TTS_VOICE_ID")
     default_language: str = Field("en", env="DEFAULT_LANGUAGE")
     
