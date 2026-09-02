@@ -95,7 +95,7 @@ Dont flow the confloversation flow striclty act as human and not as AI.And Talk 
 '''
 
 ## LLM Configuration
-LLM_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"
+LLM_MODEL = "qwen/qwen3.8-27b"
 
 ## TTS Configuration
 TTS_VOICE_ID = "a4a16c5e-5902-4732-b9b6-2a48efd2e11b"  # Default voice for TTS
