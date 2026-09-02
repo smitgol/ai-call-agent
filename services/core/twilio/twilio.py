@@ -101,7 +101,6 @@ async def twilio_handler(client_ws):
             logger.info(f"STT processing time: {stt_total_time:.2f} seconds")
             llm_start_time = time.time()
             #await llm_service.completion(transcript)
-            nonlocal transcription_logger
             if transcription_logger:
                 transcription_logger.add_entry("STT", transcript)
             await llm_service.complete_with_chunks(transcript)
@@ -139,7 +138,7 @@ async def twilio_handler(client_ws):
         # TTS PART
         async def send_chunks_to_tts(text_iterator):
             try:
-                nonlocal tts_task, llm_start_time, tts_start_time
+                nonlocal tts_task, tts_start_time
                 if tts_task:
                     tts_task.cancel()
                 if transcription_logger: transcription_logger.add_entry("LLM", "FIRST CHUNK RECEIVED")
@@ -173,7 +172,6 @@ async def twilio_handler(client_ws):
                 logger.error(f"Error sending chunks to TTS: {e}")
 
         async def send_audio_chunks_to_twilio(tts_listener):
-            nonlocal tts_start_time
             if transcription_logger: transcription_logger.add_entry("TTS", "TTS Info: Data sending started")
             async for audio_chunk in tts_listener:
                 stream_service.set_send_audio(True)
@@ -194,7 +192,6 @@ async def twilio_handler(client_ws):
 
         async def tts_listener():
             ws = tts_service.tts_ws
-            nonlocal tts_task
             try:
                 while True:
                     try:
@@ -296,7 +293,7 @@ async def twilio_handler(client_ws):
             return None
 
         async def connect_to_services():
-            nonlocal stt_service, llm_service, tts_service, stt_receiver_task, groq_stt_handler
+            nonlocal llm_service, tts_service, groq_stt_handler
             
             # Initialize Groq STT handler with Silero VAD
             groq_stt_handler = create_groq_stt_handler()
