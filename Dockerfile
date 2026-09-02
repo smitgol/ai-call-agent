@@ -11,12 +11,14 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Create a non-root user and set permissions
-RUN adduser --disabled-password --gecos "" app && \
-    touch /app/app.log && \
-    chown app:app /app/app.log && \
-    chmod 644 /app/app.log
+# RUN adduser --disabled-password --gecos "" app && \
+#     touch /app/app.log && \
+#     chown app:app /app/app.log && \
+#     chmod 644 /app/app.log
 
-USER app
+# USER app
+
+#health check
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
