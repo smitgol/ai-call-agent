@@ -286,11 +286,15 @@ async def twilio_handler(client_ws):
                         break
                     if len(buffer) >= BUFFER_SIZE or empty_byte_received:
                         outbox.put_nowait(buffer) 
-                        await groq_stt_handler.process_audio_chunk(buffer)  
+                        if groq_stt_handler:
+                            await groq_stt_handler.process_audio_chunk(buffer)  
                         buffer = bytearray(b'')
                 except Exception as e:
                     logger.error(f"Client Receiver Error: {e}")
                     
+        def create_groq_stt_handler():
+            return None
+
         async def connect_to_services():
             nonlocal stt_service, llm_service, tts_service, stt_receiver_task, groq_stt_handler
             

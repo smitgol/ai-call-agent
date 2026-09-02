@@ -140,13 +140,18 @@ async def deepgram_connect():
 
 # Initialize Silero VAD model
 def initialize_silero_vad():
-    model, utils = torch.hub.load(
-        repo_or_dir='snakers4/silero-vad',
-        model='silero_vad',
-        force_reload=False,
-        verbose=False
-    )
-    return model
+    try:
+        import torch
+        model, utils = torch.hub.load(
+            repo_or_dir='snakers4/silero-vad',
+            model='silero_vad',
+            force_reload=False,
+            verbose=False
+        )
+        return model
+    except ImportError:
+        logger.warning("torch is not installed for initialize_silero_vad")
+        return None
 
 
 
