@@ -54,6 +54,7 @@ logger = logging.getLogger(__name__)
 
 language = "hi"
 index_name  = "god-ai"
+message_store = {}
 
 def get_session_history(session_id: str) -> BaseChatMessageHistory:
     if session_id not in message_store:

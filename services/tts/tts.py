@@ -1,3 +1,4 @@
+import asyncio
 import websockets
 from services.event_emmiter import EventEmitter
 import base64
